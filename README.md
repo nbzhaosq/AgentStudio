@@ -86,6 +86,7 @@ agents 存储在 SQLite（`~/.agent-studio/studio.db`）中，可直接在 Web U
 - claude：`--model`（如 `opus`/`sonnet`）、`--effort <level>`
 - codex：`-m/--model`；effort 用 `-c model_reasoning_effort="low|medium|high"`
 - kimi：`-m/--model`（模型别名见 kimi 的 `config.toml`）
+- qodercli：`-m/--model`、`--reasoning-effort <level>`（可用模型见 `qodercli --list-models`）
 
 不设置时各 CLI 用自己的默认模型。
 

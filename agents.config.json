@@ -30,6 +30,13 @@
       "args": ["-p", "{prompt}"]
     },
     {
+      "id": "qoder",
+      "name": "Qoder",
+      "color": "#f43f5e",
+      "cmd": "qodercli",
+      "args": ["-p", "--permission-mode", "auto", "{prompt}"]
+    },
+    {
       "id": "mock-a",
       "name": "MockA",
       "color": "#a855f7",
