@@ -1,0 +1,4 @@
+node_modules/
+dist/
+.smoke-workspace/
+.DS_Store

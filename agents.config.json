@@ -1,0 +1,47 @@
+{
+  "agents": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "color": "#d97706",
+      "cmd": "claude",
+      "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits"]
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "color": "#10b981",
+      "cmd": "codex",
+      "args": [
+        "exec",
+        "{prompt}",
+        "--sandbox",
+        "workspace-write",
+        "--skip-git-repo-check",
+        "-o",
+        "{outfile}"
+      ]
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi",
+      "color": "#3b82f6",
+      "cmd": "kimi",
+      "args": ["-p", "{prompt}"]
+    },
+    {
+      "id": "mock-a",
+      "name": "MockA",
+      "color": "#a855f7",
+      "cmd": "node",
+      "args": ["{serverRoot}/scripts/mock-agent.mjs", "mock-a", "mock-b", "{prompt}"]
+    },
+    {
+      "id": "mock-b",
+      "name": "MockB",
+      "color": "#ec4899",
+      "cmd": "node",
+      "args": ["{serverRoot}/scripts/mock-agent.mjs", "mock-b", "mock-a", "{prompt}"]
+    }
+  ]
+}
