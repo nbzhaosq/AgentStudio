@@ -163,6 +163,35 @@ const server = createServer(async (req, res) => {
       rooms.set(info.id, room);
       return json(res, 201, info);
     }
+    const roomMatch = p.match(/^\/api\/rooms\/([^/]+)$/);
+    if (roomMatch && req.method === "PATCH") {
+      const room = rooms.get(roomMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      const body = JSON.parse(await readBody(req)) as { agentIds?: string[] };
+      if (!Array.isArray(body.agentIds) || body.agentIds.length === 0) {
+        return json(res, 400, { error: "agentIds 必须是非空数组" });
+      }
+      const all = store.listAgents();
+      const validIds = body.agentIds.filter((id) => all.some((a) => a.id === id));
+      if (validIds.length === 0) {
+        return json(res, 400, { error: "agentIds 中没有有效 agent" });
+      }
+      const before = new Set(room.info.agentIds);
+      const added = validIds.filter((id) => !before.has(id));
+      room.setAgentIds(validIds, all);
+      store.saveRoom(room.info);
+      if (added.length > 0) {
+        const names = added
+          .map((id) => {
+            const a = all.find((x) => x.id === id)!;
+            return `${a.name} (@${a.id})`;
+          })
+          .join("、");
+        room.postSystem(`📥 ${names} 加入了房间`);
+      }
+      broadcast({ type: "rooms_changed" });
+      return json(res, 200, room.info);
+    }
     const msgMatch = p.match(/^\/api\/rooms\/([^/]+)\/messages$/);
     if (msgMatch && req.method === "GET") {
       const room = rooms.get(msgMatch[1]);

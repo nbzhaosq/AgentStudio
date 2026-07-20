@@ -85,6 +85,17 @@ export class Room {
       .filter((a): a is AgentConfig => Boolean(a));
   }
 
+  /** 更新房间成员（运行中热更新） */
+  setAgentIds(ids: string[], all: AgentConfig[]) {
+    this.info.agentIds = ids;
+    this.syncAgents(all);
+  }
+
+  /** 落一条系统消息（广播 + 持久化 + 进入对话记录） */
+  postSystem(text: string) {
+    this.record("system", "system", text);
+  }
+
   /** 用户发言：开启一条新触发链 */
   async postUserMessage(text: string): Promise<ChatMessage> {
     const msg = this.record("user", "user", text);

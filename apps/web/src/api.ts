@@ -31,6 +31,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     }),
+  updateRoomAgents: (roomId: string, agentIds: string[]) =>
+    req<RoomInfo>(`/api/rooms/${roomId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentIds }),
+    }),
   messages: (roomId: string) =>
     req<ChatMessage[]>(`/api/rooms/${roomId}/messages`),
 };

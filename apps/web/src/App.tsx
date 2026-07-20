@@ -47,6 +47,8 @@ export default function App() {
         }));
       } else if (e.type === "agents_changed") {
         void refreshAgents();
+      } else if (e.type === "rooms_changed") {
+        void api.rooms().then(setRooms);
       }
     });
     return () => wsRef.current?.close();
@@ -74,6 +76,18 @@ export default function App() {
     ? agents.filter((a) => room.agentIds.includes(a.id))
     : [];
 
+  const addAgentToRoom = useCallback(
+    (agentId: string) => {
+      if (!room) return;
+      void api
+        .updateRoomAgents(room.id, [...room.agentIds, agentId])
+        .then((updated) =>
+          setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
+        );
+    },
+    [room],
+  );
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -96,7 +110,12 @@ export default function App() {
             statuses={statuses[room.id] ?? {}}
             onSend={send}
           />
-          <Roster agents={roomAgents} statuses={statuses[room.id] ?? {}} />
+          <Roster
+            agents={roomAgents}
+            statuses={statuses[room.id] ?? {}}
+            candidates={agents.filter((a) => !room.agentIds.includes(a.id))}
+            onAddAgent={addAgentToRoom}
+          />
         </>
       ) : (
         <div className="flex flex-1 items-center justify-center text-zinc-500">

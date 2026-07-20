@@ -52,6 +52,7 @@ export type ServerEvent =
       status: AgentStatus;
     }
   | { type: "agents_changed" }
+  | { type: "rooms_changed" }
   | { type: "error"; roomId?: string; message: string };
 
 /**

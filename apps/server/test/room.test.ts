@@ -180,6 +180,25 @@ describe("Room 路由", () => {
     expect(seen).toContain("@b (AgentB) —— 专长：后端与数据库专家"); // 名册里的同伴专长
   });
 
+  it("运行中更新房间成员：新成员可被 @ 触发", async () => {
+    const calls: string[] = [];
+    const room = new Room(
+      { id: "r2", name: "t", cwd: "/tmp", agentIds: ["a"], createdAt: 0 },
+      [agentA],
+      [],
+      {
+        invoke: async (agent) => (calls.push(agent.id), "ok"),
+        emit: () => {},
+        appendMessage: () => {},
+      },
+    );
+    room.setAgentIds(["a", "b"], [agentA, agentB]);
+    expect(room.agents.map((x) => x.id)).toEqual(["a", "b"]);
+    await room.postUserMessage("@b 来干活");
+    await waitSettled(room);
+    expect(calls).toEqual(["b"]);
+  });
+
   it("systemPrompt 字面文本注入 prompt", async () => {
     let seen = "";
     const info: RoomInfo = {
