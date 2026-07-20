@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { AgentInfo } from "@agent-studio/shared";
+import { parseMentions, type AgentInfo } from "@agent-studio/shared";
 
 interface Props {
   agents: AgentInfo[];
@@ -10,7 +10,9 @@ export default function Composer({ agents, onSend }: Props) {
   const [text, setText] = useState("");
   const [suggest, setSuggest] = useState<AgentInfo[]>([]);
   const [atStart, setAtStart] = useState(0);
+  const [noMentionHint, setNoMentionHint] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function updateSuggestions(value: string, caret: number) {
     const before = value.slice(0, caret);
@@ -21,13 +23,16 @@ export default function Composer({ agents, onSend }: Props) {
     }
     setAtStart(before.length - m[0].length);
     const token = m[1].toLowerCase();
-    setSuggest(
-      agents.filter(
-        (a) =>
-          a.id.toLowerCase().startsWith(token) ||
-          a.name.toLowerCase().startsWith(token),
-      ),
+    const matched = agents.filter(
+      (a) =>
+        a.id.toLowerCase().startsWith(token) ||
+        a.name.toLowerCase().startsWith(token),
     );
+    // @all 作为伪条目置顶，便于发现
+    if ("all".startsWith(token)) {
+      matched.unshift({ id: "all", name: "所有人", color: "#facc15" });
+    }
+    setSuggest(matched);
   }
 
   function pick(agent: AgentInfo) {
@@ -42,12 +47,22 @@ export default function Composer({ agents, onSend }: Props) {
     const t = text.trim();
     if (!t) return;
     onSend(t);
+    if (agents.length > 0 && parseMentions(t, agents).length === 0) {
+      setNoMentionHint(true);
+      if (hintTimer.current) clearTimeout(hintTimer.current);
+      hintTimer.current = setTimeout(() => setNoMentionHint(false), 4000);
+    }
     setText("");
     setSuggest([]);
   }
 
   return (
     <div className="relative border-t border-zinc-800 p-4">
+      {noMentionHint && (
+        <div className="absolute bottom-full left-4 mb-1 rounded-lg border border-amber-800/60 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-300">
+          这条消息没有 @ 任何 agent，不会触发他们回应。
+        </div>
+      )}
       {suggest.length > 0 && (
         <div className="absolute bottom-full left-4 mb-1 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
           {suggest.map((a) => (

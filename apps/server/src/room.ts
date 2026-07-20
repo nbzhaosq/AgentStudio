@@ -115,9 +115,14 @@ export class Room {
 
   private enqueue(agentId: string, turn: Turn) {
     const queue = this.queues.get(agentId) ?? [];
-    // 同一触发消息不重复入队
-    if (queue.some((t) => t.trigger.id === turn.trigger.id)) return;
-    queue.push(turn);
+    if (queue.length > 0) {
+      // 合并：每个 agent 最多保留一个待处理回合，新触发替换旧触发。
+      // prompt 在回合开始时基于完整对话记录构建，不会丢失上下文；
+      // hop 取较大值，保持防环计数保守。
+      queue[0] = { trigger: turn.trigger, chainId: turn.chainId, hop: Math.max(queue[0].hop, turn.hop) };
+    } else {
+      queue.push(turn);
+    }
     this.queues.set(agentId, queue);
     void this.pump(agentId);
   }
@@ -155,7 +160,7 @@ export class Room {
       );
       return;
     }
-    if (!reply.trim()) return;
+    if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
 
     const msg = this.record(agent.id, "agent", reply);
     const hop = turn.hop + 1;
@@ -199,10 +204,11 @@ ${roster || "（暂无其他 agent）"}
 
 规则：
 1. 阅读下面的对话记录，回应 TRIGGER 中 @ 你的消息。
-2. 需要别人行动时，在回复中 @对方（如 @${this.agents.find((a) => a.id !== agent.id)?.id ?? "名字"}）；@all 呼叫所有人。
-3. 只有在确实需要对方行动时才 @ 人；否则不要在回复中使用 @，让对话自然结束。
+2. @ 是"呼叫对方行动"：只有确实需要对方做事或回应时才能 @。仅仅是提到某人时，写名字但不要加 @（例如写"codex 那边可以处理"，而不是"@codex 那边可以处理"）。@all 会呼叫所有人，仅在确有必要时用。
+3. 如果 TRIGGER 只是顺带提到你、你没有实质内容要补充，只回复 [skip]（它不会被发到聊天室）。
 4. 你可以直接读写项目目录里的文件来完成实际工作。
-5. 回复聚焦、简洁，用中文（除非用户用其他语言）。
+5. 简洁：寒暄一两句话带过；没有被明确要求时，不要长篇自我介绍。
+6. 用中文回复（除非用户用其他语言）。
 
 === 对话记录（最新在后） ===
 ${transcript || "（暂无记录）"}

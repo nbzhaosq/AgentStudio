@@ -146,4 +146,38 @@ describe("Room 路由", () => {
     expect(seen).toContain("独特暗号-xyz");
     expect(seen).toContain("TRIGGER");
   });
+
+  it("回复 [skip] 时不落任何 agent 消息", async () => {
+    const { room, calls } = makeRoom({ a: "[skip]" });
+    await room.postUserMessage("@a 只是顺带提你一下");
+    await waitSettled(room);
+    expect(calls).toEqual(["a"]);
+    expect(room.getMessages().filter((m) => m.kind === "agent")).toHaveLength(0);
+  });
+
+  it("agent 忙碌期间的多个触发会合并为一个排队回合", async () => {
+    let calls = 0;
+    const info: RoomInfo = {
+      id: "r",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke: async () => {
+        calls++;
+        await new Promise((r) => setTimeout(r, 30)); // 模拟慢 agent
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    // 第一个触发立即开始执行；第 2、3 个触发在 agent 忙碌期间到达，应合并
+    await room.postUserMessage("@a 第 1 条");
+    await room.postUserMessage("@a 第 2 条");
+    await room.postUserMessage("@a 第 3 条");
+    await waitSettled(room);
+    expect(calls).toBe(2);
+  });
 });
