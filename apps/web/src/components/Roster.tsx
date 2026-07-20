@@ -33,6 +33,11 @@ export default function Roster({ agents, statuses }: Props) {
                 <div className="text-[10px] text-zinc-600">
                   {thinking ? "思考中…" : "空闲"}
                 </div>
+                {a.instructions && (
+                  <div className="mt-0.5 max-w-36 text-[10px] leading-snug text-zinc-500">
+                    {a.instructions}
+                  </div>
+                )}
               </div>
             </div>
           );

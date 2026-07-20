@@ -181,9 +181,16 @@ export class Room {
 
   private buildPrompt(agent: AgentConfig, trigger: ChatMessage): string {
     const roster = this.agents
-      .map((a) => (a.id === agent.id ? null : `- @${a.id} (${a.name})`))
+      .map((a) => {
+        if (a.id === agent.id) return null;
+        const skill = a.instructions ? ` —— 专长：${a.instructions}` : "";
+        return `- @${a.id} (${a.name})${skill}`;
+      })
       .filter(Boolean)
       .join("\n");
+    const role = agent.instructions
+      ? `\n你的角色设定（房间管理员指定）：${agent.instructions}\n`
+      : "";
     const window = this.messages.slice(-this.deps.transcriptWindow);
     const transcript = window
       .map((m) => {
@@ -195,7 +202,7 @@ export class Room {
       })
       .join("\n\n");
 
-    return `你是 ${agent.name}（@${agent.id}），正在一个多 Agent 协作聊天室里工作。
+    return `你是 ${agent.name}（@${agent.id}），正在一个多 Agent 协作聊天室里工作。${role}
 房间绑定的项目目录（你的工作目录）：${this.info.cwd}
 
 参与者：

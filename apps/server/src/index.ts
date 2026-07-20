@@ -84,7 +84,12 @@ const server = createServer(async (req, res) => {
       return json(
         res,
         200,
-        allAgents.map(({ id, name, color }) => ({ id, name, color })),
+        allAgents.map(({ id, name, color, instructions }) => ({
+          id,
+          name,
+          color,
+          instructions,
+        })),
       );
     }
     if (p === "/api/rooms" && req.method === "GET") {

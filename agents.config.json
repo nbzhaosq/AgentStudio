@@ -34,7 +34,8 @@
       "name": "MockA",
       "color": "#a855f7",
       "cmd": "node",
-      "args": ["{serverRoot}/scripts/mock-agent.mjs", "mock-a", "mock-b", "{prompt}"]
+      "args": ["{serverRoot}/scripts/mock-agent.mjs", "mock-a", "mock-b", "{prompt}"],
+      "instructions": "演示用 mock agent（不调用模型）"
     },
     {
       "id": "mock-b",

@@ -38,9 +38,45 @@ pnpm dev:web    # 终端 2：vite dev :5173（已配置代理）
   "name": "Sea Code",
   "color": "#0ea5e9",
   "cmd": "sea-code",           // 可执行命令
-  "args": ["run", "{prompt}"]  // 参数模板
+  "args": ["run", "{prompt}"], // 参数模板
+  "instructions": "前端与 UI 专家" // 可选：角色/专长设定
 }
 ```
+
+### instructions：给 agent 分配专长
+
+`instructions` 会注入该 agent 每轮的 prompt（作为角色设定），同时展示在名册里让其他 agent 知道它擅长什么，@ 分工更有针对性。例如：
+
+- `"前端与 UI 专家，负责 React 组件和样式"`
+- `"数据库与 SQL 专家，负责 schema 设计和查询优化"`
+
+### CLI 原生 skills
+
+各 CLI 自己的技能机制直接写进 `args` 即可，例如：
+
+```jsonc
+{ "id": "kimi", "args": ["-p", "{prompt}", "--skills-dir", "/path/to/kimi-skills"] }
+{ "id": "claude", "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "--plugin-dir", "/path/to/plugins"] }
+```
+
+### 模型与推理强度（effort）
+
+同样写进 `args`，各 CLI 参数不同（已按当前版本核实）：
+
+```jsonc
+{ "id": "claude", "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits",
+                            "--model", "opus", "--effort", "high"] }
+{ "id": "codex",  "args": ["exec", "{prompt}", "--sandbox", "workspace-write", "--skip-git-repo-check",
+                            "-m", "<model>", "-c", "model_reasoning_effort=\"high\"",
+                            "-o", "{outfile}"] }
+{ "id": "kimi",   "args": ["-p", "{prompt}", "-m", "<model>"] }
+```
+
+- claude：`--model`（如 `opus`/`sonnet`）、`--effort <level>`
+- codex：`-m/--model`；effort 用 `-c model_reasoning_effort="low|medium|high"`
+- kimi：`-m/--model`（模型别名见 kimi 的 `config.toml`）
+
+不设置时各 CLI 用自己的默认模型。
 
 参数模板支持的占位符：
 

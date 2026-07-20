@@ -180,4 +180,29 @@ describe("Room 路由", () => {
     await waitSettled(room);
     expect(calls).toBe(2);
   });
+
+  it("instructions 注入自己的角色设定和同伴名册", async () => {
+    let seen = "";
+    const info: RoomInfo = {
+      id: "r",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a", "b"],
+      createdAt: 0,
+    };
+    const aWithRole = { ...agentA, instructions: "前端与 UI 专家" };
+    const bWithRole = { ...agentB, instructions: "后端与数据库专家" };
+    const room = new Room(info, [aWithRole, bWithRole], [], {
+      invoke: async (agent, prompt) => {
+        if (agent.id === "a") seen = prompt;
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a 做个页面");
+    await waitSettled(room);
+    expect(seen).toContain("前端与 UI 专家"); // 自己的角色
+    expect(seen).toContain("@b (AgentB) —— 专长：后端与数据库专家"); // 名册里的同伴专长
+  });
 });

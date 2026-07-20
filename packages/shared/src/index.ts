@@ -3,6 +3,8 @@ export interface AgentInfo {
   id: string;
   name: string;
   color: string;
+  /** 角色/专长设定，注入 prompt 并展示给其他 agent */
+  instructions?: string;
 }
 
 export type MessageKind = "user" | "agent" | "system";
