@@ -176,6 +176,25 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                   placeholder="前端与 UI 专家"
                 />
               </label>
+              <label className="block">
+                <span className="mb-1 block text-xs text-zinc-500">
+                  专属 system prompt（长文本；以 @ 开头则指向 md 文件，相对房间目录，如
+                  @AGENTS.frontend.md）
+                </span>
+                <textarea
+                  rows={4}
+                  className="w-full resize-none rounded bg-zinc-950 px-2 py-1.5 font-mono text-xs outline-none ring-zinc-700 focus:ring-1"
+                  value={editing.systemPrompt ?? ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      systemPrompt: e.target.value || undefined,
+                    })
+                  }
+                  placeholder={"例如：\n- 只负责前端，不改服务端代码\n- 组件用函数式 + hooks\n或：@AGENTS.frontend.md"}
+                  spellCheck={false}
+                />
+              </label>
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button

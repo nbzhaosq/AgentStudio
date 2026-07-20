@@ -11,6 +11,8 @@ export interface AgentInfo {
 export interface AgentDef extends AgentInfo {
   cmd: string;
   args: string[];
+  /** 专属 system prompt；以 @ 开头时视为文件路径（相对房间目录或绝对路径），每轮读取其内容 */
+  systemPrompt?: string;
 }
 
 export type MessageKind = "user" | "agent" | "system";

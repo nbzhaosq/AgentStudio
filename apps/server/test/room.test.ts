@@ -155,6 +155,84 @@ describe("Room 路由", () => {
     expect(room.getMessages().filter((m) => m.kind === "agent")).toHaveLength(0);
   });
 
+  it("instructions 注入自己的角色设定和同伴名册", async () => {
+    let seen = "";
+    const info: RoomInfo = {
+      id: "r",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a", "b"],
+      createdAt: 0,
+    };
+    const aWithRole = { ...agentA, instructions: "前端与 UI 专家" };
+    const bWithRole = { ...agentB, instructions: "后端与数据库专家" };
+    const room = new Room(info, [aWithRole, bWithRole], [], {
+      invoke: async (agent, prompt) => {
+        if (agent.id === "a") seen = prompt;
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a 做个页面");
+    await waitSettled(room);
+    expect(seen).toContain("前端与 UI 专家"); // 自己的角色
+    expect(seen).toContain("@b (AgentB) —— 专长：后端与数据库专家"); // 名册里的同伴专长
+  });
+
+  it("systemPrompt 字面文本注入 prompt", async () => {
+    let seen = "";
+    const info: RoomInfo = {
+      id: "r",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const aWithSp = { ...agentA, systemPrompt: "只写 TypeScript，不写测试以外的代码" };
+    const room = new Room(info, [aWithSp], [], {
+      invoke: async (_a, prompt) => {
+        seen = prompt;
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    expect(seen).toContain("只写 TypeScript，不写测试以外的代码");
+    expect(seen).toContain("专属行为准则");
+  });
+
+  it("systemPrompt 以 @ 开头时读取文件内容", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const pathMod = await import("node:path");
+    const dir = mkdtempSync(pathMod.join(tmpdir(), "agent-studio-sp-"));
+    writeFileSync(pathMod.join(dir, "AGENTS.a.md"), "# 前端规范\n一律使用 Vue3。");
+
+    let seen = "";
+    const info: RoomInfo = {
+      id: "r",
+      name: "t",
+      cwd: dir,
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const aWithSp = { ...agentA, systemPrompt: "@AGENTS.a.md" };
+    const room = new Room(info, [aWithSp], [], {
+      invoke: async (_a, prompt) => {
+        seen = prompt;
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    expect(seen).toContain("一律使用 Vue3");
+  });
+
   it("agent 忙碌期间的多个触发会合并为一个排队回合", async () => {
     let calls = 0;
     const info: RoomInfo = {
@@ -179,30 +257,5 @@ describe("Room 路由", () => {
     await room.postUserMessage("@a 第 3 条");
     await waitSettled(room);
     expect(calls).toBe(2);
-  });
-
-  it("instructions 注入自己的角色设定和同伴名册", async () => {
-    let seen = "";
-    const info: RoomInfo = {
-      id: "r",
-      name: "t",
-      cwd: "/tmp",
-      agentIds: ["a", "b"],
-      createdAt: 0,
-    };
-    const aWithRole = { ...agentA, instructions: "前端与 UI 专家" };
-    const bWithRole = { ...agentB, instructions: "后端与数据库专家" };
-    const room = new Room(info, [aWithRole, bWithRole], [], {
-      invoke: async (agent, prompt) => {
-        if (agent.id === "a") seen = prompt;
-        return "ok";
-      },
-      emit: () => {},
-      appendMessage: () => {},
-    });
-    await room.postUserMessage("@a 做个页面");
-    await waitSettled(room);
-    expect(seen).toContain("前端与 UI 专家"); // 自己的角色
-    expect(seen).toContain("@b (AgentB) —— 专长：后端与数据库专家"); // 名册里的同伴专长
   });
 });

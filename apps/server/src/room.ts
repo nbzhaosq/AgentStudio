@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   parseMentions,
   type AgentStatus,
@@ -198,6 +200,10 @@ export class Room {
     const role = agent.instructions
       ? `\n你的角色设定（房间管理员指定）：${agent.instructions}\n`
       : "";
+    const custom = this.resolveSystemPrompt(agent);
+    const customSection = custom
+      ? `\n你的专属行为准则（由管理员配置，与其他规则冲突时以它为准）：\n${custom}\n`
+      : "";
     const window = this.messages.slice(-this.deps.transcriptWindow);
     const transcript = window
       .map((m) => {
@@ -209,7 +215,7 @@ export class Room {
       })
       .join("\n\n");
 
-    return `你是 ${agent.name}（@${agent.id}），正在一个多 Agent 协作聊天室里工作。${role}
+    return `你是 ${agent.name}（@${agent.id}），正在一个多 Agent 协作聊天室里工作。${role}${customSection}
 房间绑定的项目目录（你的工作目录）：${this.info.cwd}
 
 参与者：
@@ -231,6 +237,22 @@ ${transcript || "（暂无记录）"}
 [${trigger.kind === "user" ? "user" : `@${trigger.author}`}]: ${trigger.text}
 
 现在轮到你发言。只输出你要发到聊天室里的内容，不要加任何前缀或解释。`;
+  }
+
+  /** 解析 agent 的专属 system prompt：@ 开头时读取文件（相对房间目录或绝对路径），否则按字面文本 */
+  private resolveSystemPrompt(agent: AgentConfig): string {
+    const sp = agent.systemPrompt?.trim();
+    if (!sp) return "";
+    if (sp.startsWith("@")) {
+      const ref = sp.slice(1).trim();
+      const file = path.isAbsolute(ref) ? ref : path.resolve(this.info.cwd, ref);
+      try {
+        return readFileSync(file, "utf8").trim();
+      } catch {
+        return ""; // 文件不存在时静默忽略，不阻断回合
+      }
+    }
+    return sp;
   }
 
   private setStatus(agentId: string, status: AgentStatus) {

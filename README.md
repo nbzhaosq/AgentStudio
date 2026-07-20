@@ -52,6 +52,15 @@ agents 存储在 SQLite（`~/.agent-studio/studio.db`）中，可直接在 Web U
 - `"前端与 UI 专家，负责 React 组件和样式"`
 - `"数据库与 SQL 专家，负责 schema 设计和查询优化"`
 
+### systemPrompt：给 agent 配专属行为准则
+
+`systemPrompt` 是只有该 agent 自己能看到的长篇 prompt（区别于 `instructions` 的对外展示），与房间默认规则冲突时以它为准。两种填法：
+
+- **直接写文本**：如 `"只负责前端，不改服务端代码；组件一律用函数式 + hooks"`
+- **@ 指向文件**：以 `@` 开头时视为 markdown 文件路径（相对房间目录或绝对路径），每轮实时读取内容，改文件即生效。例如 `"@AGENTS.frontend.md"`——相当于给这个 agent 单独配一份 agents.md
+
+在「⚙ Agents」面板中编辑，或在 `agents.config.json` 种子里写 `systemPrompt` 字段。
+
 ### CLI 原生 skills
 
 各 CLI 自己的技能机制直接写进 `args` 即可，例如：

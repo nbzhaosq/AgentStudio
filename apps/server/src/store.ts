@@ -47,6 +47,14 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, ts);
     `);
+    // 老库迁移：补充 system_prompt 列
+    const agentCols = this.db
+      .prepare("PRAGMA table_info(agents)")
+      .all()
+      .map((r) => (r as { name: string }).name);
+    if (!agentCols.includes("system_prompt")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN system_prompt TEXT");
+    }
     this.migrateLegacyJsonl();
   }
 
@@ -63,6 +71,7 @@ export class Store {
       cmd: r.cmd as string,
       args: JSON.parse(r.args as string) as string[],
       instructions: (r.instructions as string | null) ?? undefined,
+      systemPrompt: (r.system_prompt as string | null) ?? undefined,
     }));
   }
 
@@ -73,14 +82,15 @@ export class Store {
   upsertAgent(agent: AgentDef) {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, color, cmd, args, instructions, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            color = excluded.color,
            cmd = excluded.cmd,
            args = excluded.args,
-           instructions = excluded.instructions`,
+           instructions = excluded.instructions,
+           system_prompt = excluded.system_prompt`,
       )
       .run(
         agent.id,
@@ -89,6 +99,7 @@ export class Store {
         agent.cmd,
         JSON.stringify(agent.args),
         agent.instructions ?? null,
+        agent.systemPrompt ?? null,
         Date.now(),
       );
   }

@@ -22,8 +22,10 @@ const agent: AgentDef = {
 describe("Store (SQLite)", () => {
   it("agent upsert / list / get / delete", () => {
     const { store } = tmpStore();
-    store.upsertAgent(agent);
-    expect(store.getAgent("test-a")).toMatchObject({ id: "test-a", cmd: "echo" });
+    store.upsertAgent({ ...agent, systemPrompt: "@AGENTS.test.md" });
+    const saved = store.getAgent("test-a");
+    expect(saved).toMatchObject({ id: "test-a", cmd: "echo" });
+    expect(saved?.systemPrompt).toBe("@AGENTS.test.md");
 
     store.upsertAgent({ ...agent, name: "Renamed", args: ["a", "b"] });
     const got = store.getAgent("test-a");

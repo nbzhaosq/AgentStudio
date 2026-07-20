@@ -118,6 +118,7 @@ const server = createServer(async (req, res) => {
         cmd: body.cmd!.trim(),
         args: body.args!,
         instructions: body.instructions?.trim() || undefined,
+        systemPrompt: body.systemPrompt?.trim() || undefined,
       };
       store.upsertAgent(agent);
       onAgentsChanged();
