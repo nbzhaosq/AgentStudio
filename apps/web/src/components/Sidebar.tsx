@@ -6,10 +6,11 @@ interface Props {
   activeRoomId: string | null;
   agents: AgentInfo[];
   onSelect: (id: string) => void;
+  onManageAgents: () => void;
   onCreated: (room: RoomInfo) => void;
 }
 
-export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onCreated }: Props) {
+export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManageAgents, onCreated }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [cwd, setCwd] = useState("");
@@ -41,12 +42,21 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onCreat
         <h1 className="text-sm font-semibold tracking-wide text-zinc-300">
           Agent Studio
         </h1>
-        <button
-          className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
-          onClick={() => setShowForm((v) => !v)}
-        >
-          {showForm ? "取消" : "+ 房间"}
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+            title="管理 Agents"
+            onClick={onManageAgents}
+          >
+            ⚙ Agents
+          </button>
+          <button
+            className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "取消" : "+ 房间"}
+          </button>
+        </div>
       </div>
 
       {showForm && (

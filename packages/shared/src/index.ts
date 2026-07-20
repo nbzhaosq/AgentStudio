@@ -7,6 +7,12 @@ export interface AgentInfo {
   instructions?: string;
 }
 
+/** 房间内可选的 Agent 完整定义（含调用方式） */
+export interface AgentDef extends AgentInfo {
+  cmd: string;
+  args: string[];
+}
+
 export type MessageKind = "user" | "agent" | "system";
 
 export interface ChatMessage {
@@ -43,6 +49,7 @@ export type ServerEvent =
       agentId: string;
       status: AgentStatus;
     }
+  | { type: "agents_changed" }
   | { type: "error"; roomId?: string; message: string };
 
 /**

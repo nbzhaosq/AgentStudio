@@ -3,8 +3,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientEvent, RoomInfo, ServerEvent } from "@agent-studio/shared";
-import { loadAgents, serverRoot, type AgentConfig } from "./config.js";
+import type { AgentDef, ClientEvent, RoomInfo, ServerEvent } from "@agent-studio/shared";
+import { configPath, loadAgents, serverRoot } from "./config.js";
 import { invokeAgent } from "./adapter.js";
 import { Room } from "./room.js";
 import { Store } from "./store.js";
@@ -13,8 +13,11 @@ const PORT = Number(process.env.PORT ?? 8787);
 const webDist = path.resolve(serverRoot, "../web/dist");
 
 const store = new Store();
-const allAgents = loadAgents();
-const agentById = new Map(allAgents.map((a) => [a.id, a]));
+// 首次启动：agents 表为空且存在种子配置时导入
+if (store.listAgents().length === 0 && existsSync(configPath)) {
+  store.importAgents(loadAgents());
+  console.log(`已从 ${configPath} 导入 agents 种子配置`);
+}
 
 const sockets = new Set<WebSocket>();
 function broadcast(event: ServerEvent) {
@@ -24,19 +27,28 @@ function broadcast(event: ServerEvent) {
   }
 }
 
+function makeRoomDeps() {
+  return {
+    invoke: invokeAgent,
+    emit: broadcast,
+    appendMessage: (m: Parameters<Store["appendMessage"]>[0]) =>
+      store.appendMessage(m),
+  };
+}
+
 const rooms = new Map<string, Room>();
 for (const info of store.loadRooms()) {
-  const agents = info.agentIds
-    .map((id) => agentById.get(id))
-    .filter((a): a is AgentConfig => Boolean(a));
-  rooms.set(
-    info.id,
-    new Room(info, agents, store.loadMessages(info.id), {
-      invoke: invokeAgent,
-      emit: broadcast,
-      appendMessage: (m) => store.appendMessage(m),
-    }),
-  );
+  const all = store.listAgents();
+  const room = new Room(info, [], store.loadMessages(info.id), makeRoomDeps());
+  room.syncAgents(all);
+  rooms.set(info.id, room);
+}
+
+/** agents 变更后：同步所有房间成员并通知客户端 */
+function onAgentsChanged() {
+  const all = store.listAgents();
+  for (const room of rooms.values()) room.syncAgents(all);
+  broadcast({ type: "agents_changed" });
 }
 
 function json(res: ServerResponse, status: number, body: unknown) {
@@ -76,21 +88,48 @@ function serveStatic(res: ServerResponse, urlPath: string): boolean {
   return true;
 }
 
+function validateAgent(body: Partial<AgentDef>): string | null {
+  if (!body.id || !/^[a-z0-9][a-z0-9-]*$/.test(body.id)) {
+    return "id 必填，且只能包含小写字母、数字、连字符";
+  }
+  if (!body.name?.trim()) return "name 必填";
+  if (!body.cmd?.trim()) return "cmd 必填";
+  if (!Array.isArray(body.args) || body.args.some((a) => typeof a !== "string")) {
+    return "args 必须是字符串数组";
+  }
+  return null;
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
   const p = url.pathname;
   try {
     if (p === "/api/agents" && req.method === "GET") {
-      return json(
-        res,
-        200,
-        allAgents.map(({ id, name, color, instructions }) => ({
-          id,
-          name,
-          color,
-          instructions,
-        })),
-      );
+      return json(res, 200, store.listAgents());
+    }
+    if (p === "/api/agents" && req.method === "POST") {
+      const body = (await readBody(req).then(JSON.parse)) as Partial<AgentDef>;
+      const err = validateAgent(body);
+      if (err) return json(res, 400, { error: err });
+      const agent: AgentDef = {
+        id: body.id!,
+        name: body.name!.trim(),
+        color: body.color || "#888888",
+        cmd: body.cmd!.trim(),
+        args: body.args!,
+        instructions: body.instructions?.trim() || undefined,
+      };
+      store.upsertAgent(agent);
+      onAgentsChanged();
+      return json(res, 200, agent);
+    }
+    const agentMatch = p.match(/^\/api\/agents\/([^/]+)$/);
+    if (agentMatch && req.method === "DELETE") {
+      const id = agentMatch[1];
+      if (!store.getAgent(id)) return json(res, 404, { error: "agent 不存在" });
+      store.deleteAgent(id);
+      onAgentsChanged();
+      return json(res, 200, { ok: true });
     }
     if (p === "/api/rooms" && req.method === "GET") {
       return json(res, 200, [...rooms.values()].map((r) => r.info));
@@ -105,6 +144,7 @@ const server = createServer(async (req, res) => {
       if (!body.cwd || !existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
         return json(res, 400, { error: `目录不存在：${body.cwd}` });
       }
+      const agentById = new Map(store.listAgents().map((a) => [a.id, a]));
       const agentIds = (body.agentIds ?? []).filter((id) => agentById.has(id));
       if (agentIds.length === 0) {
         return json(res, 400, { error: "至少选择一个有效 agent" });
@@ -117,15 +157,9 @@ const server = createServer(async (req, res) => {
         createdAt: Date.now(),
       };
       store.saveRoom(info);
-      const agents = agentIds.map((id) => agentById.get(id)!);
-      rooms.set(
-        info.id,
-        new Room(info, agents, [], {
-          invoke: invokeAgent,
-          emit: broadcast,
-          appendMessage: (m) => store.appendMessage(m),
-        }),
-      );
+      const room = new Room(info, [], [], makeRoomDeps());
+      room.syncAgents(store.listAgents());
+      rooms.set(info.id, room);
       return json(res, 201, info);
     }
     const msgMatch = p.match(/^\/api\/rooms\/([^/]+)\/messages$/);
@@ -170,6 +204,6 @@ wss.on("connection", (ws) => {
 server.listen(PORT, () => {
   console.log(`Agent Studio server: http://localhost:${PORT}`);
   console.log(
-    `已加载 agents: ${allAgents.map((a) => a.id).join(", ")}；房间数: ${rooms.size}`,
+    `已加载 agents: ${store.listAgents().map((a) => a.id).join(", ")}；房间数: ${rooms.size}`,
   );
 });

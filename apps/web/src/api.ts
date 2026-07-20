@@ -1,5 +1,5 @@
 import type {
-  AgentInfo,
+  AgentDef,
   ChatMessage,
   RoomInfo,
   ServerEvent,
@@ -15,7 +15,15 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  agents: () => req<AgentInfo[]>("/api/agents"),
+  agents: () => req<AgentDef[]>("/api/agents"),
+  upsertAgent: (agent: AgentDef) =>
+    req<AgentDef>("/api/agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(agent),
+    }),
+  deleteAgent: (id: string) =>
+    req<{ ok: boolean }>(`/api/agents/${id}`, { method: "DELETE" }),
   rooms: () => req<RoomInfo[]>("/api/rooms"),
   createRoom: (input: { name: string; cwd: string; agentIds: string[] }) =>
     req<RoomInfo>("/api/rooms", {

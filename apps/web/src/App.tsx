@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  AgentInfo,
+  AgentDef,
   AgentStatus,
   ChatMessage,
   RoomInfo,
@@ -9,24 +9,28 @@ import { api, connectWS } from "./api";
 import Sidebar from "./components/Sidebar";
 import ChatView from "./components/ChatView";
 import Roster from "./components/Roster";
+import AgentsPanel from "./components/AgentsPanel";
 
 export default function App() {
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [agents, setAgents] = useState<AgentDef[]>([]);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [showAgents, setShowAgents] = useState(false);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [statuses, setStatuses] = useState<
     Record<string, Record<string, AgentStatus>>
   >({});
   const wsRef = useRef<WebSocket | null>(null);
 
+  const refreshAgents = useCallback(() => api.agents().then(setAgents), []);
+
   useEffect(() => {
-    void api.agents().then(setAgents);
+    void refreshAgents();
     void api.rooms().then((rs) => {
       setRooms(rs);
       if (rs.length > 0) setActiveRoomId((cur) => cur ?? rs[0].id);
     });
-  }, []);
+  }, [refreshAgents]);
 
   useEffect(() => {
     wsRef.current = connectWS((e) => {
@@ -41,10 +45,12 @@ export default function App() {
           ...prev,
           [e.roomId]: { ...(prev[e.roomId] ?? {}), [e.agentId]: e.status },
         }));
+      } else if (e.type === "agents_changed") {
+        void refreshAgents();
       }
     });
     return () => wsRef.current?.close();
-  }, []);
+  }, [refreshAgents]);
 
   useEffect(() => {
     if (!activeRoomId) return;
@@ -75,6 +81,7 @@ export default function App() {
         activeRoomId={activeRoomId}
         agents={agents}
         onSelect={setActiveRoomId}
+        onManageAgents={() => setShowAgents(true)}
         onCreated={(r) => {
           setRooms((prev) => [...prev, r]);
           setActiveRoomId(r.id);
@@ -95,6 +102,13 @@ export default function App() {
         <div className="flex flex-1 items-center justify-center text-zinc-500">
           创建或选择一个房间开始
         </div>
+      )}
+      {showAgents && (
+        <AgentsPanel
+          agents={agents}
+          onClose={() => setShowAgents(false)}
+          onChanged={() => void refreshAgents()}
+        />
       )}
     </div>
   );

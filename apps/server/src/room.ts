@@ -34,7 +34,7 @@ const MAX_TEXT = 4000;
 
 export class Room {
   readonly info: RoomInfo;
-  readonly agents: AgentConfig[];
+  agents: AgentConfig[];
   private deps: Required<Omit<RoomDeps, "maxHops" | "transcriptWindow">> & {
     maxHops: number;
     transcriptWindow: number;
@@ -74,6 +74,13 @@ export class Room {
     if (this.running.size > 0) return false;
     for (const q of this.queues.values()) if (q.length > 0) return false;
     return true;
+  }
+
+  /** agent 定义被编辑/删除后，按房间成员 id 重新同步 */
+  syncAgents(all: AgentConfig[]) {
+    this.agents = this.info.agentIds
+      .map((id) => all.find((a) => a.id === id))
+      .filter((a): a is AgentConfig => Boolean(a));
   }
 
   /** 用户发言：开启一条新触发链 */

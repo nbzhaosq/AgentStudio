@@ -30,7 +30,9 @@ pnpm dev:web    # 终端 2：vite dev :5173（已配置代理）
 
 ## 配置 agents
 
-编辑仓库根目录的 `agents.config.json`：
+agents 存储在 SQLite（`~/.agent-studio/studio.db`）中，可直接在 Web UI 里管理：左栏「⚙ Agents」打开管理面板，支持新增、编辑、删除，保存后即时生效（无需重启）。房间和消息记录同样存在该库中。
+
+首次启动时，若数据库为空且存在仓库根目录的 `agents.config.json`，会自动将其作为种子导入。一条 agent 定义如下：
 
 ```jsonc
 {
@@ -95,21 +97,21 @@ agent 以自动批准模式运行（claude `acceptEdits`、codex `workspace-writ
 
 - 只为房间绑定你信任的项目目录；
 - 建议项目先 `git init` 并提交，便于回滚；
-- 需要更强/更弱的自治，直接改 `agents.config.json` 里对应 agent 的 `args`。
+- 需要更强/更弱的自治，在「⚙ Agents」面板里改对应 agent 的 `args`。
 
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `PORT` | `8787` | server 端口 |
-| `AGENT_STUDIO_CONFIG` | 仓库根 `agents.config.json` | agent 配置文件路径 |
+| `AGENT_STUDIO_CONFIG` | 仓库根 `agents.config.json` | agents 种子配置路径（首启导入） |
 | `AGENT_STUDIO_DATA_DIR` | `~/.agent-studio` | 房间与消息持久化目录 |
 | `AGENT_STUDIO_TIMEOUT_MS` | `600000` | 单次 agent 调用超时 |
 
 ## 项目结构
 
 ```
-agents.config.json    # agent 定义（命令模板）
+agents.config.json    # agents 种子配置（首次启动导入 SQLite）
 apps/server/          # Node 后端：房间引擎、CLI 适配、REST + WebSocket
 apps/web/             # React + Vite + Tailwind 前端
 packages/shared/      # 前后端共享类型与 @ 解析
