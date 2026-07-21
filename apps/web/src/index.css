@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-ink-950: #0a0a0c;
+  --color-ink-900: #101013;
+  --color-ink-850: #141419;
+  --color-ink-800: #1a1a21;
+  --color-signal: #22d3ee;
+}
+
 html,
 body,
 #root {
@@ -7,7 +19,73 @@ body,
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+  @apply font-sans text-zinc-200 antialiased;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(34, 211, 238, 0.05), transparent 60%),
+    radial-gradient(900px 500px at 90% 110%, rgba(34, 211, 238, 0.03), transparent 55%),
+    var(--color-ink-950);
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.25);
+}
+
+/* 细滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a33 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a2a33;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 消息入场 */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.msg-in {
+  animation: msg-in 0.25s ease-out both;
+}
+
+/* 工作脉冲 */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+.pulse-dot {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+/* 微标签 */
+.micro-label {
+  @apply font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500;
+}
+
+/* 输入控件 */
+.field {
+  @apply w-full rounded-lg border border-white/5 bg-ink-900 px-2.5 py-1.5 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-signal/40;
 }
 
 /* ---- agent 消息的 markdown 渲染 ---- */
@@ -27,7 +105,7 @@ body {
 .markdown h2,
 .markdown h3,
 .markdown h4 {
-  @apply font-semibold text-zinc-100;
+  @apply font-display font-semibold text-zinc-100;
   margin: 0.8em 0 0.3em;
 }
 .markdown h1 { font-size: 1.15em; }
@@ -42,11 +120,14 @@ body {
 .markdown ul { list-style: disc; }
 .markdown ol { list-style: decimal; }
 .markdown li { margin: 0.15em 0; }
+.markdown li::marker {
+  color: #52525b;
+}
 .markdown code {
-  @apply rounded bg-zinc-800 px-1 py-0.5 font-mono text-[0.85em] text-amber-200/90;
+  @apply rounded bg-white/8 px-1 py-0.5 font-mono text-[0.85em] text-cyan-200/90;
 }
 .markdown pre {
-  @apply my-2 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 p-3;
+  @apply my-2 overflow-x-auto rounded-lg border border-white/8 bg-black/50 p-3;
 }
 .markdown pre code {
   @apply bg-transparent p-0 text-xs text-zinc-200;
@@ -55,20 +136,20 @@ body {
   @apply text-sky-400 underline underline-offset-2;
 }
 .markdown blockquote {
-  @apply my-1 border-l-2 border-zinc-700 pl-3 text-zinc-400;
+  @apply my-1 border-l-2 border-white/15 pl-3 text-zinc-400;
 }
 .markdown table {
   @apply my-2 border-collapse text-xs;
 }
 .markdown th,
 .markdown td {
-  @apply border border-zinc-700 px-2 py-1;
+  @apply border border-white/12 px-2 py-1;
 }
 .markdown th {
-  @apply bg-zinc-800 font-semibold;
+  @apply bg-white/6 font-semibold;
 }
 .markdown hr {
-  @apply my-3 border-zinc-800;
+  @apply my-3 border-white/10;
 }
 .markdown strong {
   @apply font-semibold text-zinc-50;

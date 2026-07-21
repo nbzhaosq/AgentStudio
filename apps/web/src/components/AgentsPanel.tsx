@@ -68,17 +68,17 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
       onClick={onClose}
     >
       <div
-        className="flex h-[32rem] w-[46rem] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
+        className="flex h-[32rem] w-[46rem] overflow-hidden rounded-xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 左侧列表 */}
-        <div className="w-56 shrink-0 overflow-y-auto border-r border-zinc-800 p-3">
+        <div className="w-56 shrink-0 overflow-y-auto border-r border-white/6 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Agents
             </h2>
             <button
-              className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-700"
+              className="rounded-md border border-white/8 bg-white/4 px-2 py-0.5 text-xs text-zinc-300 hover:border-white/20"
               onClick={() => startEdit(EMPTY)}
             >
               + 新增
@@ -88,8 +88,8 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
             <button
               key={a.id}
               onClick={() => startEdit(a)}
-              className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-zinc-800 ${
-                editing?.id === a.id ? "bg-zinc-800" : ""
+              className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/6 ${
+                editing?.id === a.id ? "bg-white/8" : ""
               }`}
             >
               <span
@@ -109,7 +109,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 <label className="block">
                   <span className="mb-1 block text-xs text-zinc-500">id（@ 用）</span>
                   <input
-                    className="w-full rounded bg-zinc-950 px-2 py-1.5 font-mono outline-none ring-zinc-700 focus:ring-1 disabled:opacity-50"
+                    className="field font-mono disabled:opacity-50"
                     value={editing.id}
                     disabled={!isNew}
                     onChange={(e) =>
@@ -121,7 +121,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 <label className="block">
                   <span className="mb-1 block text-xs text-zinc-500">显示名</span>
                   <input
-                    className="w-full rounded bg-zinc-950 px-2 py-1.5 outline-none ring-zinc-700 focus:ring-1"
+                    className="field"
                     value={editing.name}
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                     placeholder="Sea Code"
@@ -132,7 +132,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 <label className="block">
                   <span className="mb-1 block text-xs text-zinc-500">命令</span>
                   <input
-                    className="w-full rounded bg-zinc-950 px-2 py-1.5 font-mono outline-none ring-zinc-700 focus:ring-1"
+                    className="field font-mono"
                     value={editing.cmd}
                     onChange={(e) => setEditing({ ...editing, cmd: e.target.value })}
                     placeholder="sea-code"
@@ -142,7 +142,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                   <span className="mb-1 block text-xs text-zinc-500">颜色</span>
                   <input
                     type="color"
-                    className="h-8 w-full cursor-pointer rounded bg-zinc-950"
+                    className="h-8 w-full cursor-pointer rounded-lg border border-white/5 bg-ink-900"
                     value={editing.color}
                     onChange={(e) => setEditing({ ...editing, color: e.target.value })}
                   />
@@ -154,7 +154,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 </span>
                 <textarea
                   rows={4}
-                  className="w-full resize-none rounded bg-zinc-950 px-2 py-1.5 font-mono text-xs outline-none ring-zinc-700 focus:ring-1"
+                  className="field resize-none font-mono text-xs"
                   value={argsText}
                   onChange={(e) => setArgsText(e.target.value)}
                   spellCheck={false}
@@ -165,7 +165,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                   专长设定（注入 prompt 并展示给其他 agent）
                 </span>
                 <input
-                  className="w-full rounded bg-zinc-950 px-2 py-1.5 outline-none ring-zinc-700 focus:ring-1"
+                  className="field"
                   value={editing.instructions ?? ""}
                   onChange={(e) =>
                     setEditing({
@@ -183,7 +183,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 </span>
                 <textarea
                   rows={4}
-                  className="w-full resize-none rounded bg-zinc-950 px-2 py-1.5 font-mono text-xs outline-none ring-zinc-700 focus:ring-1"
+                  className="field resize-none font-mono text-xs"
                   value={editing.systemPrompt ?? ""}
                   onChange={(e) =>
                     setEditing({
@@ -198,7 +198,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button
-                  className="rounded bg-blue-600 px-4 py-1.5 hover:bg-blue-500 disabled:opacity-50"
+                  className="rounded-lg bg-signal/85 px-4 py-1.5 font-medium text-ink-950 hover:bg-signal disabled:opacity-40"
                   disabled={busy}
                   onClick={() => void save()}
                 >
@@ -206,14 +206,14 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                 </button>
                 {!isNew && (
                   <button
-                    className="rounded bg-red-900/60 px-4 py-1.5 text-red-300 hover:bg-red-900"
+                    className="rounded-lg border border-red-500/30 bg-red-950/50 px-4 py-1.5 text-red-300 hover:bg-red-950"
                     onClick={() => void remove(editing.id)}
                   >
                     删除
                   </button>
                 )}
                 <button
-                  className="rounded bg-zinc-800 px-4 py-1.5 text-zinc-300 hover:bg-zinc-700"
+                  className="rounded-lg border border-white/8 bg-white/4 px-4 py-1.5 text-zinc-300 hover:border-white/20"
                   onClick={() => setEditing(null)}
                 >
                   取消

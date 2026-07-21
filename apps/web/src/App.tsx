@@ -167,8 +167,14 @@ export default function App() {
           />
         </>
       ) : (
-        <div className="flex flex-1 items-center justify-center text-zinc-500">
-          创建或选择一个房间开始
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="6" cy="6" r="3" fill="#22d3ee" opacity="0.9" />
+            <circle cx="18" cy="8" r="3" fill="#34d399" opacity="0.85" />
+            <circle cx="11" cy="18" r="3" fill="#facc15" opacity="0.85" />
+            <path d="M8.5 7.5 15 8M7 9l3 6.5M16.5 10.5 12.5 15.5" stroke="#52525b" strokeWidth="1.2" />
+          </svg>
+          <p className="text-sm text-zinc-500">创建或选择一个房间开始</p>
         </div>
       )}
       {showAgents && (

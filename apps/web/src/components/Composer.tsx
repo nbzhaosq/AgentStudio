@@ -28,7 +28,6 @@ export default function Composer({ agents, onSend }: Props) {
         a.id.toLowerCase().startsWith(token) ||
         a.name.toLowerCase().startsWith(token),
     );
-    // @all 作为伪条目置顶，便于发现
     if ("all".startsWith(token)) {
       matched.unshift({ id: "all", name: "所有人", color: "#facc15" });
     }
@@ -56,15 +55,17 @@ export default function Composer({ agents, onSend }: Props) {
     setSuggest([]);
   }
 
+  const canSend = text.trim().length > 0;
+
   return (
-    <div className="relative border-t border-zinc-800 p-4">
+    <div className="relative px-5 pb-4">
       {noMentionHint && (
-        <div className="absolute bottom-full left-4 mb-1 rounded-lg border border-amber-800/60 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-300">
+        <div className="absolute bottom-full left-5 mb-2 rounded-lg border border-amber-500/30 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-300">
           这条消息没有 @ 任何 agent，不会触发他们回应。
         </div>
       )}
       {suggest.length > 0 && (
-        <div className="absolute bottom-full left-4 mb-1 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
+        <div className="absolute bottom-full left-5 mb-2 overflow-hidden rounded-xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50">
           {suggest.map((a) => (
             <button
               key={a.id}
@@ -72,44 +73,66 @@ export default function Composer({ agents, onSend }: Props) {
                 e.preventDefault();
                 pick(a);
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-zinc-800"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/6"
             >
               <span
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: a.color }}
               />
-              @{a.id}
+              <span className="font-mono">@{a.id}</span>
               <span className="text-xs text-zinc-500">{a.name}</span>
             </button>
           ))}
         </div>
       )}
-      <textarea
-        ref={taRef}
-        rows={2}
-        className="w-full resize-none rounded-lg bg-zinc-900 px-3 py-2 text-sm outline-none ring-zinc-700 placeholder:text-zinc-600 focus:ring-1"
-        placeholder="发消息… 用 @ 呼叫 agent，Enter 发送，Shift+Enter 换行"
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          updateSuggestions(e.target.value, e.target.selectionStart);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            if (suggest.length > 0) {
+
+      <div className="flex items-end gap-2 rounded-xl border border-white/8 bg-ink-850 p-2 transition-colors focus-within:border-signal/35">
+        <textarea
+          ref={taRef}
+          rows={2}
+          className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed outline-none placeholder:text-zinc-600"
+          placeholder={`发消息… @ 呼叫 agent，@all 全员集合`}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            updateSuggestions(e.target.value, e.target.selectionStart);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (suggest.length > 0) {
+                pick(suggest[0]);
+              } else {
+                send();
+              }
+            } else if (e.key === "Tab" && suggest.length > 0) {
+              e.preventDefault();
               pick(suggest[0]);
-            } else {
-              send();
+            } else if (e.key === "Escape") {
+              setSuggest([]);
             }
-          } else if (e.key === "Tab" && suggest.length > 0) {
-            e.preventDefault();
-            pick(suggest[0]);
-          } else if (e.key === "Escape") {
-            setSuggest([]);
-          }
-        }}
-      />
+          }}
+        />
+        <div className="flex items-center gap-2">
+          <span className="hidden font-mono text-[10px] text-zinc-600 sm:block">
+            Enter ⏎
+          </span>
+          <button
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+              canSend
+                ? "bg-signal text-ink-950 hover:bg-cyan-300"
+                : "bg-white/6 text-zinc-600"
+            }`}
+            disabled={!canSend}
+            onClick={send}
+            title="发送"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M3.4 20.4 21.85 12 3.4 3.6l-.01 6.53L14 12 3.39 13.87l.01 6.53z" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
