@@ -9,3 +9,67 @@ body,
 body {
   @apply bg-zinc-950 text-zinc-100 antialiased;
 }
+
+/* ---- agent 消息的 markdown 渲染 ---- */
+.markdown {
+  @apply text-sm leading-relaxed text-zinc-200;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0.4em 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  @apply font-semibold text-zinc-100;
+  margin: 0.8em 0 0.3em;
+}
+.markdown h1 { font-size: 1.15em; }
+.markdown h2 { font-size: 1.1em; }
+.markdown h3,
+.markdown h4 { font-size: 1em; }
+.markdown ul,
+.markdown ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.markdown ul { list-style: disc; }
+.markdown ol { list-style: decimal; }
+.markdown li { margin: 0.15em 0; }
+.markdown code {
+  @apply rounded bg-zinc-800 px-1 py-0.5 font-mono text-[0.85em] text-amber-200/90;
+}
+.markdown pre {
+  @apply my-2 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 p-3;
+}
+.markdown pre code {
+  @apply bg-transparent p-0 text-xs text-zinc-200;
+}
+.markdown a {
+  @apply text-sky-400 underline underline-offset-2;
+}
+.markdown blockquote {
+  @apply my-1 border-l-2 border-zinc-700 pl-3 text-zinc-400;
+}
+.markdown table {
+  @apply my-2 border-collapse text-xs;
+}
+.markdown th,
+.markdown td {
+  @apply border border-zinc-700 px-2 py-1;
+}
+.markdown th {
+  @apply bg-zinc-800 font-semibold;
+}
+.markdown hr {
+  @apply my-3 border-zinc-800;
+}
+.markdown strong {
+  @apply font-semibold text-zinc-50;
+}

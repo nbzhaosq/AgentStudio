@@ -6,6 +6,7 @@ import type {
   RoomInfo,
 } from "@agent-studio/shared";
 import Composer from "./Composer";
+import Markdown from "./Markdown";
 
 interface Props {
   room: RoomInfo;
@@ -46,21 +47,32 @@ function authorMeta(m: ChatMessage, agents: AgentInfo[]) {
   return { label: a ? `${a.name} (@${a.id})` : `@${m.author}`, color: a?.color ?? "#a1a1aa" };
 }
 
-/** 消息正文：长消息或含代码块时默认折叠 */
-function MessageBody({ text, color, agents }: { text: string; color: string; agents: AgentInfo[] }) {
+/** 消息正文：agent 消息用 markdown 渲染；长消息默认折叠 */
+function MessageBody({ msg, color, agents }: { msg: ChatMessage; color: string; agents: AgentInfo[] }) {
   const [open, setOpen] = useState(false);
+  const text = msg.text;
   const isLong = text.length > 600 || text.includes("```");
-  const shown = !isLong || open ? text : text.slice(0, 300);
+  let shown = !isLong || open ? text : text.slice(0, 300);
+  // 折叠截断在代码块中间时，补一个闭合 fence 避免渲染错乱
+  if (isLong && !open && (shown.match(/```/g)?.length ?? 0) % 2 === 1) {
+    shown += "\n```";
+  }
   return (
     <div
-      className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm leading-relaxed text-zinc-200"
+      className="break-words border-l-2 pl-3"
       style={{ borderColor: color }}
     >
-      {renderText(shown, agents)}
-      {isLong && !open && "…"}
+      {msg.kind === "agent" ? (
+        <Markdown text={shown} agents={agents} />
+      ) : (
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+          {renderText(shown, agents)}
+          {isLong && !open && "…"}
+        </div>
+      )}
       {isLong && (
         <button
-          className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+          className="mt-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
           onClick={() => setOpen((v) => !v)}
         >
           {open ? "收起" : `展开全部（${text.length} 字）`}
@@ -112,7 +124,7 @@ export default function ChatView({ room, agents, messages, statuses, activities,
                   {new Date(m.ts).toLocaleTimeString()}
                 </span>
               </div>
-              <MessageBody text={m.text} color={meta.color} agents={agents} />
+              <MessageBody msg={m} color={meta.color} agents={agents} />
             </div>
           );
         })}
