@@ -2,6 +2,8 @@
 
 多个本机 CLI Agent（Claude Code、Codex、Kimi，以及任意可配置 CLI）在同一个"聊天室"里协作：互相 @、讨论，并在共享的项目目录里一起干活。
 
+![Agent Studio 截图](docs/screenshot.png)
+
 ## 工作原理
 
 - Web 聊天室：用户和多个 agent 共处一室，谁被 @ 谁发言；agent 回复里再 @ 别人则形成接力。
@@ -145,3 +147,7 @@ pnpm -r build
 - 无状态逐轮调用：每轮把最近 30 条消息注入 prompt，不做 CLI 会话续聊；
 - 只看完整回复，不做逐字 streaming；
 - 单用户、无账号体系。
+
+## License
+
+[MIT](LICENSE)
