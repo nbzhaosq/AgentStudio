@@ -37,6 +37,41 @@
       "args": ["-p", "--permission-mode", "auto", "{prompt}"]
     },
     {
+      "id": "opencode",
+      "name": "OpenCode",
+      "color": "#14b8a6",
+      "cmd": "opencode",
+      "args": ["run", "{prompt}"]
+    },
+    {
+      "id": "omp",
+      "name": "OhMyPi",
+      "color": "#84cc16",
+      "cmd": "omp",
+      "args": ["-p", "{prompt}"]
+    },
+    {
+      "id": "pi",
+      "name": "Pi",
+      "color": "#6366f1",
+      "cmd": "pi",
+      "args": ["-p", "{prompt}"]
+    },
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "color": "#f97316",
+      "cmd": "openclaw",
+      "args": ["agent", "--message", "{prompt}", "--local"]
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes",
+      "color": "#0ea5e9",
+      "cmd": "hermes",
+      "args": ["chat", "-q", "{prompt}", "-Q", "--yolo"]
+    },
+    {
       "id": "mock-a",
       "name": "MockA",
       "color": "#a855f7",
