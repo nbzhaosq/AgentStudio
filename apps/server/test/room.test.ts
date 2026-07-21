@@ -180,6 +180,38 @@ describe("Room 路由", () => {
     expect(seen).toContain("@b (AgentB) —— 专长：后端与数据库专家"); // 名册里的同伴专长
   });
 
+  it("文件活动归属到正在运行的 agent，并注入其他 agent 的 prompt", async () => {
+    let aPrompt = "";
+    const room = new Room(
+      { id: "ra", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0 },
+      [agentA, agentB],
+      [],
+      {
+        invoke: async (agent, prompt) => {
+          if (agent.id === "a") {
+            aPrompt = prompt;
+            return "ok";
+          }
+          await new Promise((r) => setTimeout(r, 150)); // b 模拟慢任务
+          return "done";
+        },
+        emit: () => {},
+        appendMessage: () => {},
+        activityFlushMs: 20,
+      },
+    );
+    await room.postUserMessage("@b 开始干活");
+    await new Promise((r) => setTimeout(r, 30)); // 等 b 进入 running
+    room.handleFsChange("src/x.ts");
+    await new Promise((r) => setTimeout(r, 60)); // 等 flush（20ms 周期）
+    expect(room.recentFilesOf("b")).toContain("src/x.ts");
+    // b 仍在运行时触发 a，a 的 prompt 应包含 b 的工作状态
+    await room.postUserMessage("@a 看看情况");
+    await waitSettled(room);
+    expect(aPrompt).toContain("@b 正在工作");
+    expect(aPrompt).toContain("src/x.ts");
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

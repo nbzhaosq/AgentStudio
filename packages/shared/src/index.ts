@@ -53,6 +53,14 @@ export type ServerEvent =
     }
   | { type: "agents_changed" }
   | { type: "rooms_changed" }
+  | {
+      /** 工作区文件变更活动（瞬态，不持久化）；agentId 为 null 表示多 agent 并发无法精确归属 */
+      type: "agent_activity";
+      roomId: string;
+      agentId: string | null;
+      paths: string[];
+      ts: number;
+    }
   | { type: "error"; roomId?: string; message: string };
 
 /**

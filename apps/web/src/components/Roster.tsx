@@ -4,11 +4,12 @@ import type { AgentInfo, AgentStatus } from "@agent-studio/shared";
 interface Props {
   agents: AgentInfo[];
   statuses: Record<string, AgentStatus>;
+  activities: Record<string, string[]>;
   candidates: AgentInfo[];
   onAddAgent: (agentId: string) => void;
 }
 
-export default function Roster({ agents, statuses, candidates, onAddAgent }: Props) {
+export default function Roster({ agents, statuses, activities, candidates, onAddAgent }: Props) {
   const [picking, setPicking] = useState(false);
 
   return (
@@ -58,6 +59,8 @@ export default function Roster({ agents, statuses, candidates, onAddAgent }: Pro
         </div>
         {agents.map((a) => {
           const thinking = statuses[a.id] === "thinking";
+          const acts = activities[a.id] ?? [];
+          const lastFile = acts.length > 0 ? acts[acts.length - 1] : null;
           return (
             <div key={a.id} className="flex items-center gap-2.5">
               <span
@@ -66,11 +69,16 @@ export default function Roster({ agents, statuses, candidates, onAddAgent }: Pro
               >
                 {a.name.slice(0, 1)}
               </span>
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm text-zinc-300">@{a.id}</div>
                 <div className="text-[10px] text-zinc-600">
-                  {thinking ? "思考中…" : "空闲"}
+                  {thinking ? "工作中…" : "空闲"}
                 </div>
+                {thinking && lastFile && (
+                  <div className="max-w-36 truncate font-mono text-[10px] text-emerald-500/80">
+                    ✎ {lastFile}
+                  </div>
+                )}
                 {a.instructions && (
                   <div className="mt-0.5 max-w-36 text-[10px] leading-snug text-zinc-500">
                     {a.instructions}

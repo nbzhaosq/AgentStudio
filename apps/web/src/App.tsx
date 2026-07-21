@@ -20,6 +20,10 @@ export default function App() {
   const [statuses, setStatuses] = useState<
     Record<string, Record<string, AgentStatus>>
   >({});
+  /** roomId → agentId（"_ws" 表示无法归属）→ 最近改动路径 */
+  const [activities, setActivities] = useState<
+    Record<string, Record<string, string[]>>
+  >({});
   const wsRef = useRef<WebSocket | null>(null);
 
   const refreshAgents = useCallback(() => api.agents().then(setAgents), []);
@@ -49,6 +53,13 @@ export default function App() {
         void refreshAgents();
       } else if (e.type === "rooms_changed") {
         void api.rooms().then(setRooms);
+      } else if (e.type === "agent_activity") {
+        const key = e.agentId ?? "_ws";
+        setActivities((prev) => {
+          const roomActs = { ...(prev[e.roomId] ?? {}) };
+          roomActs[key] = [...(roomActs[key] ?? []), ...e.paths].slice(-10);
+          return { ...prev, [e.roomId]: roomActs };
+        });
       }
     });
     return () => wsRef.current?.close();
@@ -108,11 +119,13 @@ export default function App() {
             agents={roomAgents}
             messages={messages[room.id] ?? []}
             statuses={statuses[room.id] ?? {}}
+            activities={activities[room.id] ?? {}}
             onSend={send}
           />
           <Roster
             agents={roomAgents}
             statuses={statuses[room.id] ?? {}}
+            activities={activities[room.id] ?? {}}
             candidates={agents.filter((a) => !room.agentIds.includes(a.id))}
             onAddAgent={addAgentToRoom}
           />

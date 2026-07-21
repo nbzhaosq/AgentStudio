@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AgentInfo,
   AgentStatus,
@@ -12,6 +12,7 @@ interface Props {
   agents: AgentInfo[];
   messages: ChatMessage[];
   statuses: Record<string, AgentStatus>;
+  activities: Record<string, string[]>;
   onSend: (text: string) => void;
 }
 
@@ -45,7 +46,31 @@ function authorMeta(m: ChatMessage, agents: AgentInfo[]) {
   return { label: a ? `${a.name} (@${a.id})` : `@${m.author}`, color: a?.color ?? "#a1a1aa" };
 }
 
-export default function ChatView({ room, agents, messages, statuses, onSend }: Props) {
+/** 消息正文：长消息或含代码块时默认折叠 */
+function MessageBody({ text, color, agents }: { text: string; color: string; agents: AgentInfo[] }) {
+  const [open, setOpen] = useState(false);
+  const isLong = text.length > 600 || text.includes("```");
+  const shown = !isLong || open ? text : text.slice(0, 300);
+  return (
+    <div
+      className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm leading-relaxed text-zinc-200"
+      style={{ borderColor: color }}
+    >
+      {renderText(shown, agents)}
+      {isLong && !open && "…"}
+      {isLong && (
+        <button
+          className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "收起" : `展开全部（${text.length} 字）`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function ChatView({ room, agents, messages, statuses, activities, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,21 +112,23 @@ export default function ChatView({ room, agents, messages, statuses, onSend }: P
                   {new Date(m.ts).toLocaleTimeString()}
                 </span>
               </div>
-              <div
-                className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm leading-relaxed text-zinc-200"
-                style={{ borderColor: meta.color }}
-              >
-                {renderText(m.text, agents)}
-              </div>
+              <MessageBody text={m.text} color={meta.color} agents={agents} />
             </div>
           );
         })}
-        {thinking.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 text-sm" style={{ color: a.color }}>
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: a.color }} />
-            {a.name} 正在思考…
-          </div>
-        ))}
+        {thinking.map((a) => {
+          const acts = activities[a.id] ?? [];
+          const lastFile = acts.length > 0 ? acts[acts.length - 1] : null;
+          return (
+            <div key={a.id} className="flex items-center gap-2 text-sm" style={{ color: a.color }}>
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: a.color }} />
+              {a.name} 正在工作…
+              {lastFile && (
+                <span className="font-mono text-xs text-emerald-500/80">✎ {lastFile}</span>
+              )}
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import {
   parseMentions,
@@ -24,6 +24,8 @@ export interface RoomDeps {
   maxHops?: number;
   /** prompt 中携带的最近消息条数，默认 30 */
   transcriptWindow?: number;
+  /** 文件活动聚合周期 ms，默认 800 */
+  activityFlushMs?: number;
 }
 
 interface Turn {
@@ -37,13 +39,19 @@ const MAX_TEXT = 4000;
 export class Room {
   readonly info: RoomInfo;
   agents: AgentConfig[];
-  private deps: Required<Omit<RoomDeps, "maxHops" | "transcriptWindow">> & {
+  private deps: Required<Omit<RoomDeps, "maxHops" | "transcriptWindow" | "activityFlushMs">> & {
     maxHops: number;
     transcriptWindow: number;
+    activityFlushMs: number;
   };
   private messages: ChatMessage[] = [];
   private queues = new Map<string, Turn[]>();
   private running = new Set<string>();
+  private watcher?: FSWatcher;
+  /** agentId → 最近改动文件（最新在后，上限 10） */
+  private recentFiles = new Map<string, string[]>();
+  private pendingPaths = new Set<string>();
+  private flushTimer?: NodeJS.Timeout;
 
   constructor(
     info: RoomInfo,
@@ -60,7 +68,17 @@ export class Room {
       appendMessage: deps.appendMessage,
       maxHops: deps.maxHops ?? 12,
       transcriptWindow: deps.transcriptWindow ?? 30,
+      activityFlushMs: deps.activityFlushMs ?? 800,
     };
+    // 监听工作区文件变更，作为 agent 的工作活动信号（平台不支持时静默降级）
+    try {
+      this.watcher = watch(this.info.cwd, { recursive: true }, (_e, filename) => {
+        if (filename) this.handleFsChange(filename);
+      });
+      this.watcher.unref?.();
+    } catch {
+      /* 降级：无活动信号 */
+    }
   }
 
   getMessages(): ChatMessage[] {
@@ -94,6 +112,54 @@ export class Room {
   /** 落一条系统消息（广播 + 持久化 + 进入对话记录） */
   postSystem(text: string) {
     this.record("system", "system", text);
+  }
+
+  /** 某 agent 最近改动的文件（测试与 prompt 用） */
+  recentFilesOf(agentId: string): string[] {
+    return this.recentFiles.get(agentId) ?? [];
+  }
+
+  /** 内部：工作区文件变更回调（聚合同一周期内的路径） */
+  handleFsChange(filename: string) {
+    const rel = filename.replaceAll("\\", "/");
+    if (
+      rel.includes("node_modules/") ||
+      rel.includes(".git/") ||
+      rel.startsWith(".git")
+    ) {
+      return;
+    }
+    this.pendingPaths.add(rel);
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flushActivity(), this.deps.activityFlushMs);
+      this.flushTimer.unref?.();
+    }
+  }
+
+  private flushActivity() {
+    this.flushTimer = undefined;
+    const paths = [...this.pendingPaths].slice(-5);
+    this.pendingPaths.clear();
+    if (paths.length === 0) return;
+    // 同一时刻只有一个 agent 在运行时才能精确归属
+    const running = [...this.running];
+    const agentId = running.length === 1 ? running[0] : null;
+    if (agentId) {
+      const list = this.recentFiles.get(agentId) ?? [];
+      for (const p of paths) {
+        const i = list.indexOf(p);
+        if (i >= 0) list.splice(i, 1);
+        list.push(p);
+      }
+      this.recentFiles.set(agentId, list.slice(-10));
+    }
+    this.deps.emit({
+      type: "agent_activity",
+      roomId: this.info.id,
+      agentId,
+      paths,
+      ts: Date.now(),
+    });
   }
 
   /** 用户发言：开启一条新触发链 */
@@ -153,6 +219,7 @@ export class Room {
     if (!queue || queue.length === 0) return;
 
     this.running.add(agentId);
+    this.recentFiles.delete(agentId); // 新一轮工作，清空上次的改动记录
     this.setStatus(agentId, "thinking");
     try {
       while (queue.length > 0) {
@@ -215,6 +282,19 @@ export class Room {
     const customSection = custom
       ? `\n你的专属行为准则（由管理员配置，与其他规则冲突时以它为准）：\n${custom}\n`
       : "";
+    // 其他正在工作的 agent 状态，让被触发的 agent 感知房间动态
+    const busy = this.agents.filter(
+      (a) => a.id !== agent.id && this.running.has(a.id),
+    );
+    const busySection =
+      busy.length > 0
+        ? `\n=== 房间当前状态 ===\n${busy
+            .map((a) => {
+              const files = this.recentFilesOf(a.id);
+              return `@${a.id} 正在工作${files.length > 0 ? `（最近改动：${files.slice(-5).join("、")}）` : ""}`;
+            })
+            .join("\n")}\n`
+        : "";
     const window = this.messages.slice(-this.deps.transcriptWindow);
     const transcript = window
       .map((m) => {
@@ -240,7 +320,8 @@ ${roster || "（暂无其他 agent）"}
 4. 你可以直接读写项目目录里的文件来完成实际工作。
 5. 简洁：寒暄一两句话带过；没有被明确要求时，不要长篇自我介绍。
 6. 用中文回复（除非用户用其他语言）。
-
+7. 聊天室只承载讨论与决策：不要在回复里粘贴大段代码或文件内容。动手干活后用几句话汇报你做了什么、改动了哪些文件、关键决策和理由即可，细节让其他人自己去看文件。
+${busySection}
 === 对话记录（最新在后） ===
 ${transcript || "（暂无记录）"}
 
