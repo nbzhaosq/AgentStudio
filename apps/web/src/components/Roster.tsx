@@ -7,6 +7,7 @@ interface Props {
   activities: Record<string, string[]>;
   candidates: AgentInfo[];
   onAddAgent: (agentId: string) => void;
+  onRemoveAgent: (agentId: string) => void;
   sessions: SessionInfo[];
   onResetSession: (agentId?: string) => void;
 }
@@ -19,7 +20,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(s / 86400)} 天前`;
 }
 
-export default function Roster({ agents, statuses, activities, candidates, onAddAgent, sessions, onResetSession }: Props) {
+export default function Roster({ agents, statuses, activities, candidates, onAddAgent, onRemoveAgent, sessions, onResetSession }: Props) {
   const [picking, setPicking] = useState(false);
 
   return (
@@ -72,14 +73,14 @@ export default function Roster({ agents, statuses, activities, candidates, onAdd
           const acts = activities[a.id] ?? [];
           const lastFile = acts.length > 0 ? acts[acts.length - 1] : null;
           return (
-            <div key={a.id} className="flex items-center gap-2.5">
+            <div key={a.id} className="group flex items-center gap-2.5">
               <span
                 className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white ${thinking ? "animate-pulse" : ""}`}
                 style={{ backgroundColor: a.color }}
               >
                 {a.name.slice(0, 1)}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-sm text-zinc-300">@{a.id}</div>
                 <div className="text-[10px] text-zinc-600">
                   {thinking ? "工作中…" : "空闲"}
@@ -95,6 +96,17 @@ export default function Roster({ agents, statuses, activities, candidates, onAdd
                   </div>
                 )}
               </div>
+              <button
+                className="hidden shrink-0 rounded px-1 text-xs text-zinc-600 hover:bg-zinc-800 hover:text-red-400 group-hover:block"
+                title="移出房间"
+                onClick={() => {
+                  if (confirm(`把 ${a.name} (@${a.id}) 移出房间？其会话也会被清除。`)) {
+                    onRemoveAgent(a.id);
+                  }
+                }}
+              >
+                ×
+              </button>
             </div>
           );
         })}

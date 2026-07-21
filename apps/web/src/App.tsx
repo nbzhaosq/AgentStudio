@@ -120,6 +120,18 @@ export default function App() {
     [room],
   );
 
+  const removeAgentFromRoom = useCallback(
+    (agentId: string) => {
+      if (!room) return;
+      void api
+        .updateRoomAgents(room.id, room.agentIds.filter((id) => id !== agentId))
+        .then((updated) =>
+          setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
+        );
+    },
+    [room],
+  );
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -149,6 +161,7 @@ export default function App() {
             activities={activities[room.id] ?? {}}
             candidates={agents.filter((a) => !room.agentIds.includes(a.id))}
             onAddAgent={addAgentToRoom}
+            onRemoveAgent={removeAgentFromRoom}
             sessions={sessions[room.id] ?? []}
             onResetSession={resetSession}
           />

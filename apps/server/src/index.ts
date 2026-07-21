@@ -206,16 +206,20 @@ const server = createServer(async (req, res) => {
       }
       const before = new Set(room.info.agentIds);
       const added = validIds.filter((id) => !before.has(id));
+      const removed = [...before].filter((id) => !validIds.includes(id));
       room.setAgentIds(validIds, all);
       store.saveRoom(room.info);
+      const nameOf = (id: string) => {
+        const a = all.find((x) => x.id === id);
+        return a ? `${a.name} (@${a.id})` : `@${id}`;
+      };
       if (added.length > 0) {
-        const names = added
-          .map((id) => {
-            const a = all.find((x) => x.id === id)!;
-            return `${a.name} (@${a.id})`;
-          })
-          .join("、");
-        room.postSystem(`📥 ${names} 加入了房间`);
+        room.postSystem(`📥 ${added.map(nameOf).join("、")} 加入了房间`);
+      }
+      if (removed.length > 0) {
+        for (const id of removed) room.clearSession(id); // 清掉被移除者的会话
+        room.postSystem(`📤 ${removed.map(nameOf).join("、")} 离开了房间`);
+        broadcast({ type: "sessions_changed", roomId: room.info.id });
       }
       broadcast({ type: "rooms_changed" });
       return json(res, 200, room.info);

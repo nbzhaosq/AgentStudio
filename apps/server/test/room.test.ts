@@ -320,6 +320,28 @@ describe("Room 路由", () => {
     expect(deleted).toEqual(["a", "a"]); // clearAll 对每个成员调一次
   });
 
+  it("移出房间后不能再被 @ 触发", async () => {
+    const calls: string[] = [];
+    const room = new Room(
+      { id: "r3", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0 },
+      [agentA, agentB],
+      [],
+      {
+        invoke: async (agent) => (calls.push(agent.id), "ok"),
+        emit: () => {},
+        appendMessage: () => {},
+      },
+    );
+    room.setAgentIds(["a"], [agentA, agentB]); // 移出 b
+    await room.postUserMessage("@b 还在吗");
+    await waitSettled(room);
+    expect(calls).toEqual([]);
+    // a 仍正常
+    await room.postUserMessage("@a 在");
+    await waitSettled(room);
+    expect(calls).toEqual(["a"]);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(
