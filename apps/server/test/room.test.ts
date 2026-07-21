@@ -342,6 +342,40 @@ describe("Room 路由", () => {
     expect(calls).toEqual(["a"]);
   });
 
+  it("流式开关：开启时广播 draft 并在结束后清除；关闭时不广播", async () => {
+    const events: ServerEvent[] = [];
+    const info: RoomInfo = {
+      id: "rd",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const invoke: InvokeFn = async (_a, _p, _c, _s, onChunk) => {
+      onChunk?.("部分一");
+      onChunk?.("部分一 部分二");
+      return "完整回复";
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke,
+      emit: (e) => events.push(e),
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    const drafts = events.filter((e) => e.type === "draft");
+    expect(drafts.length).toBeGreaterThanOrEqual(2);
+    expect(drafts.at(-1)).toMatchObject({ agentId: "a", text: "" }); // 结束清除
+    expect(room.getMessages().at(-1)?.text).toBe("完整回复");
+
+    // 关闭后不再广播
+    events.length = 0;
+    room.setStreaming(false);
+    await room.postUserMessage("@a 再来");
+    await waitSettled(room);
+    expect(events.filter((e) => e.type === "draft")).toHaveLength(0);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

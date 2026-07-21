@@ -68,6 +68,11 @@ export class Store {
       this.db.exec("ALTER TABLE agents ADD COLUMN session_resume_args TEXT");
       this.db.exec("ALTER TABLE agents ADD COLUMN session_capture TEXT");
     }
+    // 老库迁移：补充流式输出列
+    if (!agentCols.includes("stream_args_extra")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN stream_args_extra TEXT");
+      this.db.exec("ALTER TABLE agents ADD COLUMN stream_format TEXT");
+    }
     this.migrateLegacyJsonl();
   }
 
@@ -92,6 +97,12 @@ export class Store {
         ? (JSON.parse(r.session_resume_args as string) as string[])
         : undefined,
       sessionCapture: (r.session_capture as string | null) ?? undefined,
+      streamArgsExtra: r.stream_args_extra
+        ? (JSON.parse(r.stream_args_extra as string) as string[])
+        : undefined,
+      streamFormat:
+        (r.stream_format as "claude-json" | "codex-json" | "kimi-json" | "text" | null) ??
+        undefined,
     }));
   }
 
@@ -102,8 +113,8 @@ export class Store {
   upsertAgent(agent: AgentDef) {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, session_start_args, session_resume_args, session_capture, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, session_start_args, session_resume_args, session_capture, stream_args_extra, stream_format, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            color = excluded.color,
@@ -113,7 +124,9 @@ export class Store {
            system_prompt = excluded.system_prompt,
            session_start_args = excluded.session_start_args,
            session_resume_args = excluded.session_resume_args,
-           session_capture = excluded.session_capture`,
+           session_capture = excluded.session_capture,
+           stream_args_extra = excluded.stream_args_extra,
+           stream_format = excluded.stream_format`,
       )
       .run(
         agent.id,
@@ -126,6 +139,8 @@ export class Store {
         agent.sessionStartArgs ? JSON.stringify(agent.sessionStartArgs) : null,
         agent.sessionResumeArgs ? JSON.stringify(agent.sessionResumeArgs) : null,
         agent.sessionCapture ?? null,
+        agent.streamArgsExtra ? JSON.stringify(agent.streamArgsExtra) : null,
+        agent.streamFormat ?? null,
         Date.now(),
       );
   }

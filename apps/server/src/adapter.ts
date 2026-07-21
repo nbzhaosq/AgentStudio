@@ -5,9 +5,12 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentConfig } from "./config.js";
 import { serverRoot } from "./config.js";
+import { makeStreamParser } from "./stream.js";
 
 /** 单次调用超时，默认 10 分钟，可用环境变量覆盖 */
 const TIMEOUT_MS = Number(process.env.AGENT_STUDIO_TIMEOUT_MS ?? 10 * 60 * 1000);
+/** 流式草稿节流间隔 */
+const DRAFT_THROTTLE_MS = 120;
 
 export interface InvokeResult {
   text: string;
@@ -51,6 +54,7 @@ export function invokeAgent(
   prompt: string,
   cwd: string,
   sessionId?: string,
+  onChunk?: (draft: string) => void,
 ): Promise<InvokeResult> {
   let template = agent.args;
   let pinnedId: string | undefined;
@@ -67,13 +71,18 @@ export function invokeAgent(
     : null;
   const outfile = outDir ? path.join(outDir, "reply.txt") : "";
 
-  const args = buildArgs(template, {
+  let args = buildArgs(template, {
     prompt,
     outfile,
     cwd,
     serverRoot,
     sessionId: sessionId ?? pinnedId ?? "",
   });
+  // 流式模式：追加流式 flags（如 --output-format stream-json）
+  if (onChunk && agent.streamArgsExtra) {
+    args = [...args, ...agent.streamArgsExtra];
+  }
+  const parser = onChunk ? makeStreamParser(agent.streamFormat ?? "text") : null;
 
   return new Promise((resolve, reject) => {
     const child = spawn(agent.cmd, args, {
@@ -84,7 +93,25 @@ export function invokeAgent(
 
     let stdout = "";
     let stderr = "";
-    child.stdout.setEncoding("utf8").on("data", (d) => (stdout += d));
+    let lastEmit = 0;
+    let lastDraft = "";
+    const emitDraft = (force = false) => {
+      if (!parser || !onChunk || !lastDraft) return;
+      const now = Date.now();
+      if (!force && now - lastEmit < DRAFT_THROTTLE_MS) return;
+      lastEmit = now;
+      onChunk(lastDraft);
+    };
+    child.stdout.setEncoding("utf8").on("data", (d) => {
+      stdout += d;
+      if (parser) {
+        const draft = parser.feed(d);
+        if (draft) {
+          lastDraft = draft;
+          emitDraft();
+        }
+      }
+    });
     child.stderr.setEncoding("utf8").on("data", (d) => (stderr += d));
 
     const timer = setTimeout(() => {
@@ -113,6 +140,11 @@ export function invokeAgent(
             reply = "";
           }
         }
+        // 流式解析器给最终文本（JSON 流必须靠它，stdout 是 NDJSON）
+        if (!reply && parser) {
+          reply = parser.final() ?? "";
+          emitDraft(true); // 推一次最终草稿
+        }
         if (!reply) reply = stdout.trim();
       } finally {
         cleanup();
@@ -129,7 +161,9 @@ export function invokeAgent(
         text: reply,
         // 捕获型 CLI 的会话 id 提示有的走 stdout（codex/hermes），有的走 stderr（kimi）
         sessionId:
-          pinnedId ?? captureSessionId(agent.sessionCapture, `${stdout}\n${stderr}`),
+          pinnedId ??
+          parser?.sessionId?.() ??
+          captureSessionId(agent.sessionCapture, `${stdout}\n${stderr}`),
       });
     });
   });

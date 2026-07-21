@@ -7,7 +7,9 @@
       "cmd": "claude",
       "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits"],
       "sessionStartArgs": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "--session-id", "{sessionId}"],
-      "sessionResumeArgs": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "-r", "{sessionId}"]
+      "sessionResumeArgs": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "-r", "{sessionId}"],
+      "streamArgsExtra": ["--output-format", "stream-json", "--verbose", "--include-partial-messages"],
+      "streamFormat": "claude-json"
     },
     {
       "id": "codex",
@@ -30,10 +32,12 @@
         "{sessionId}",
         "{prompt}",
         "--skip-git-repo-check",
+        "--json",
         "-o",
         "{outfile}"
       ],
-      "sessionCapture": "\"thread_id\":\"([^\"]+)\""
+      "sessionCapture": "\"thread_id\":\"([^\"]+)\"",
+      "streamFormat": "codex-json"
     },
     {
       "id": "kimi",

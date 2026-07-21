@@ -14,6 +14,9 @@ interface Props {
   messages: ChatMessage[];
   statuses: Record<string, AgentStatus>;
   activities: Record<string, string[]>;
+  drafts: Record<string, string>;
+  streaming: boolean;
+  onToggleStreaming: () => void;
   onSend: (text: string) => void;
 }
 
@@ -81,27 +84,41 @@ function MessageBody({ msg, color, agents }: { msg: ChatMessage; color: string; 
   );
 }
 
-export default function ChatView({ room, agents, messages, statuses, activities, onSend }: Props) {
+export default function ChatView({ room, agents, messages, statuses, activities, drafts, streaming, onToggleStreaming, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, statuses]);
+  }, [messages.length, statuses, drafts]);
 
   const thinking = agents.filter((a) => statuses[a.id] === "thinking");
+  const drafting = agents.filter((a) => drafts[a.id]);
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
-      <header className="border-b border-line px-6 py-3.5">
-        <div className="font-display text-sm font-semibold tracking-wide text-text-1">
-          {room.name}
+      <header className="flex items-center justify-between border-b border-line px-6 py-3.5">
+        <div>
+          <div className="font-display text-sm font-semibold tracking-wide text-text-1">
+            {room.name}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-text-3">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+            </svg>
+            <span className="truncate">{room.cwd}</span>
+          </div>
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-text-3">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-          </svg>
-          <span className="truncate">{room.cwd}</span>
-        </div>
+        <button
+          className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
+            streaming
+              ? "border-signal/40 bg-signal/10 text-signal"
+              : "border-line text-text-4 hover:text-text-2"
+          }`}
+          title="流式输出：agent 回复逐字显示；关闭则等完整回复"
+          onClick={onToggleStreaming}
+        >
+          {streaming ? "⚡ 流式" : "▤ 整段"}
+        </button>
       </header>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
@@ -149,24 +166,40 @@ export default function ChatView({ room, agents, messages, statuses, activities,
             </div>
           );
         })}
-        {thinking.map((a) => {
-          const acts = activities[a.id] ?? [];
-          const lastFile = acts.length > 0 ? acts[acts.length - 1] : null;
-          return (
-            <div key={a.id} className="msg-in flex items-center gap-2.5 text-sm">
-              <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="font-display text-[13px]" style={{ color: a.color }}>
-                {a.name}
+        {drafting.map((a) => (
+          <div key={a.id} className="msg-in">
+            <div className="mb-1 flex items-baseline gap-2">
+              <span className="font-display text-[13px] font-semibold" style={{ color: a.color }}>
+                {a.name} (@{a.id})
               </span>
-              <span className="text-text-3">正在工作…</span>
-              {lastFile && (
-                <span className="truncate font-mono text-[11px] text-emerald-400/80">
-                  ✎ {lastFile}
-                </span>
-              )}
+              <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </div>
-          );
-        })}
+            <div className="break-words border-l-2 pl-3" style={{ borderColor: a.color }}>
+              <Markdown text={drafts[a.id]} agents={agents} />
+              <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-text-3 align-text-bottom" />
+            </div>
+          </div>
+        ))}
+        {thinking
+          .filter((a) => !drafts[a.id])
+          .map((a) => {
+            const acts = activities[a.id] ?? [];
+            const lastFile = acts.length > 0 ? acts[acts.length - 1] : null;
+            return (
+              <div key={a.id} className="msg-in flex items-center gap-2.5 text-sm">
+                <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="font-display text-[13px]" style={{ color: a.color }}>
+                  {a.name}
+                </span>
+                <span className="text-text-3">正在工作…</span>
+                {lastFile && (
+                  <span className="truncate font-mono text-[11px] text-emerald-400/80">
+                    ✎ {lastFile}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         <div ref={bottomRef} />
       </div>
 

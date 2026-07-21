@@ -17,6 +17,7 @@ export type InvokeFn = (
   prompt: string,
   cwd: string,
   sessionId?: string,
+  onChunk?: (draft: string) => void,
 ) => Promise<InvokeReply>;
 
 export interface RoomDeps {
@@ -57,6 +58,8 @@ export class Room {
   private sessions: Map<string, string>;
   /** agentId → 上次发言时间戳（增量 prompt 截取用） */
   private lastTurnAt = new Map<string, number>();
+  /** 流式输出开关（运行时，随 set_streaming 切换） */
+  private streaming = true;
   private watcher?: FSWatcher;
   /** agentId → 最近改动文件（最新在后，上限 10） */
   private recentFiles = new Map<string, string[]>();
@@ -141,6 +144,10 @@ export class Room {
   clearAllSessions() {
     this.sessions.clear();
     for (const a of this.agents) this.deps.deleteSession(this.info.id, a.id);
+  }
+
+  setStreaming(on: boolean) {
+    this.streaming = on;
   }
 
   /** 某 agent 最近改动的文件（测试与 prompt 用） */
@@ -323,8 +330,30 @@ export class Room {
     prompt: string,
     sessionId?: string,
   ): Promise<{ text: string; sessionId?: string }> {
-    const res = await this.deps.invoke(agent, prompt, this.info.cwd, sessionId);
-    return typeof res === "string" ? { text: res } : res;
+    const onChunk = this.streaming
+      ? (text: string) =>
+          this.deps.emit({
+            type: "draft",
+            roomId: this.info.id,
+            agentId: agent.id,
+            text,
+            ts: Date.now(),
+          })
+      : undefined;
+    try {
+      const res = await this.deps.invoke(agent, prompt, this.info.cwd, sessionId, onChunk);
+      return typeof res === "string" ? { text: res } : res;
+    } finally {
+      if (onChunk) {
+        this.deps.emit({
+          type: "draft",
+          roomId: this.info.id,
+          agentId: agent.id,
+          text: "",
+          ts: Date.now(),
+        });
+      }
+    }
   }
 
   private fail(agent: AgentConfig, err: unknown) {

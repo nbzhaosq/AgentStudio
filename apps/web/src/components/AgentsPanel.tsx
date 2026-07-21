@@ -24,6 +24,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
   const [argsText, setArgsText] = useState("");
   const [startArgsText, setStartArgsText] = useState("");
   const [resumeArgsText, setResumeArgsText] = useState("");
+  const [streamExtraText, setStreamExtraText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [error, setError] = useState("");
@@ -47,6 +48,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
     setArgsText(argsToLines(agent.args));
     setStartArgsText(argsToLines(agent.sessionStartArgs));
     setResumeArgsText(argsToLines(agent.sessionResumeArgs));
+    setStreamExtraText(argsToLines(agent.streamArgsExtra));
   }
 
   function formToAgent(): AgentDef | null {
@@ -56,6 +58,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
       args: linesToArgs(argsText),
       sessionStartArgs: linesToArgs(startArgsText) || undefined,
       sessionResumeArgs: linesToArgs(resumeArgsText) || undefined,
+      streamArgsExtra: linesToArgs(streamExtraText) || undefined,
     };
   }
 
@@ -413,6 +416,38 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                           }
                           placeholder="kimi -r (session_[a-z0-9-]+)"
                         />
+                      </label>
+                      <label className="block">
+                        <span className={labelCls}>streamArgsExtra（流式追加参数，每行一个）</span>
+                        <textarea
+                          rows={2}
+                          className={`${inputCls} resize-none font-mono text-xs`}
+                          value={streamExtraText}
+                          onChange={(e) => setStreamExtraText(e.target.value)}
+                          placeholder={"--output-format\nstream-json"}
+                          spellCheck={false}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className={labelCls}>streamFormat（输出流格式）</span>
+                        <select
+                          className={inputCls}
+                          value={editing.streamFormat ?? "text"}
+                          onChange={(e) =>
+                            setEditing({
+                              ...editing,
+                              streamFormat:
+                                e.target.value === "text"
+                                  ? undefined
+                                  : (e.target.value as AgentDef["streamFormat"]),
+                            })
+                          }
+                        >
+                          <option value="text">text（原样透传）</option>
+                          <option value="claude-json">claude-json</option>
+                          <option value="codex-json">codex-json</option>
+                          <option value="kimi-json">kimi-json</option>
+                        </select>
                       </label>
                     </div>
                   )}

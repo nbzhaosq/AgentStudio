@@ -26,6 +26,11 @@ export default function App() {
     Record<string, Record<string, string[]>>
   >({});
   const [sessions, setSessions] = useState<Record<string, SessionInfo[]>>({});
+  /** roomId → agentId → 流式草稿 */
+  const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [streaming, setStreaming] = useState(
+    () => localStorage.getItem("as-streaming") !== "off",
+  );
   const wsRef = useRef<WebSocket | null>(null);
 
   const refreshAgents = useCallback(() => api.agents().then(setAgents), []);
@@ -46,6 +51,21 @@ export default function App() {
           ...prev,
           [m.roomId]: [...(prev[m.roomId] ?? []), m],
         }));
+        // 正式消息到达，清掉该 agent 的草稿
+        if (m.kind === "agent") {
+          setDrafts((prev) => {
+            const roomDrafts = { ...(prev[m.roomId] ?? {}) };
+            delete roomDrafts[m.author];
+            return { ...prev, [m.roomId]: roomDrafts };
+          });
+        }
+      } else if (e.type === "draft") {
+        setDrafts((prev) => {
+          const roomDrafts = { ...(prev[e.roomId] ?? {}) };
+          if (e.text) roomDrafts[e.agentId] = e.text;
+          else delete roomDrafts[e.agentId];
+          return { ...prev, [e.roomId]: roomDrafts };
+        });
       } else if (e.type === "agent_status") {
         setStatuses((prev) => ({
           ...prev,
@@ -79,7 +99,21 @@ export default function App() {
     void api.roomSessions(activeRoomId).then((ss) =>
       setSessions((prev) => ({ ...prev, [activeRoomId]: ss })),
     );
-  }, [activeRoomId]);
+    // 加入房间时同步流式开关
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({ type: "set_streaming", roomId: activeRoomId, streaming }),
+      );
+    }
+  }, [activeRoomId, streaming]);
+
+  const toggleStreaming = useCallback(() => {
+    setStreaming((v) => {
+      const next = !v;
+      localStorage.setItem("as-streaming", next ? "on" : "off");
+      return next;
+    });
+  }, []);
 
   const send = useCallback(
     (text: string) => {
@@ -153,6 +187,9 @@ export default function App() {
             messages={messages[room.id] ?? []}
             statuses={statuses[room.id] ?? {}}
             activities={activities[room.id] ?? {}}
+            drafts={drafts[room.id] ?? {}}
+            streaming={streaming}
+            onToggleStreaming={toggleStreaming}
             onSend={send}
           />
           <Roster

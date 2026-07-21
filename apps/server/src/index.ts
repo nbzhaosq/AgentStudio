@@ -18,19 +18,23 @@ if (store.listAgents().length === 0 && existsSync(configPath)) {
   store.importAgents(loadAgents());
   console.log(`已从 ${configPath} 导入 agents 种子配置`);
 }
-// 老库升级：种子里的会话续聊字段补到已存在但缺少这些字段的 agent 上（不覆盖用户其他设置）
+// 老库升级：种子里新增的能力字段（会话续聊、流式）补到缺少它们的老 agent 上
 if (existsSync(configPath)) {
   const seedById = new Map(loadAgents().map((a) => [a.id, a]));
   for (const a of store.listAgents()) {
     const seed = seedById.get(a.id);
-    if (seed && !a.sessionResumeArgs && seed.sessionResumeArgs) {
-      store.upsertAgent({
-        ...a,
-        sessionStartArgs: seed.sessionStartArgs,
-        sessionResumeArgs: seed.sessionResumeArgs,
-        sessionCapture: seed.sessionCapture,
-      });
+    if (!seed) continue;
+    const patch: Partial<AgentDef> = {};
+    if (!a.sessionResumeArgs && seed.sessionResumeArgs) {
+      patch.sessionStartArgs = seed.sessionStartArgs;
+      patch.sessionResumeArgs = seed.sessionResumeArgs;
+      patch.sessionCapture = seed.sessionCapture;
     }
+    if (!a.streamFormat && !a.streamArgsExtra && (seed.streamFormat || seed.streamArgsExtra)) {
+      patch.streamFormat = seed.streamFormat;
+      patch.streamArgsExtra = seed.streamArgsExtra;
+    }
+    if (Object.keys(patch).length > 0) store.upsertAgent({ ...a, ...patch });
   }
 }
 
@@ -151,6 +155,8 @@ const server = createServer(async (req, res) => {
         sessionStartArgs: body.sessionStartArgs,
         sessionResumeArgs: body.sessionResumeArgs,
         sessionCapture: body.sessionCapture,
+        streamArgsExtra: body.streamArgsExtra,
+        streamFormat: body.streamFormat,
       };
       store.upsertAgent(agent);
       onAgentsChanged();
@@ -287,6 +293,9 @@ wss.on("connection", (ws) => {
         return;
       }
       await room.postUserMessage(event.text);
+    } else if (event.type === "set_streaming") {
+      const room = rooms.get(event.roomId);
+      room?.setStreaming(event.streaming);
     }
   });
 });

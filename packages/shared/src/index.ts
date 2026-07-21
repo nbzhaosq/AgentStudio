@@ -22,6 +22,13 @@ export interface AgentDef extends AgentInfo {
   sessionStartArgs?: string[];
   sessionResumeArgs?: string[];
   sessionCapture?: string;
+  /**
+   * 流式输出（可选）：
+   * - streamArgsExtra：流式模式下追加到调用参数末尾的 flags（如 claude 的 --output-format stream-json）
+   * - streamFormat：输出流格式，缺省为 "text"（原样透传 stdout）
+   */
+  streamArgsExtra?: string[];
+  streamFormat?: "claude-json" | "codex-json" | "kimi-json" | "text";
 }
 
 export type MessageKind = "user" | "agent" | "system";
@@ -58,7 +65,9 @@ export interface SessionInfo {
 }
 
 /** WebSocket 客户端 → 服务端 */
-export type ClientEvent = { type: "send_message"; roomId: string; text: string };
+export type ClientEvent =
+  | { type: "send_message"; roomId: string; text: string }
+  | { type: "set_streaming"; roomId: string; streaming: boolean };
 
 /** WebSocket 服务端 → 客户端 */
 export type ServerEvent =
@@ -78,6 +87,14 @@ export type ServerEvent =
       roomId: string;
       agentId: string | null;
       paths: string[];
+      ts: number;
+    }
+  | {
+      /** agent 回复的流式草稿（瞬态）；text 为空字符串表示清除草稿 */
+      type: "draft";
+      roomId: string;
+      agentId: string;
+      text: string;
       ts: number;
     }
   | { type: "error"; roomId?: string; message: string };
