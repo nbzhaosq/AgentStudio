@@ -132,6 +132,10 @@ const server = createServer(async (req, res) => {
     if (p === "/api/agents" && req.method === "GET") {
       return json(res, 200, store.listAgents());
     }
+    if (p === "/api/agent-presets" && req.method === "GET") {
+      // 内置 CLI 模板（来自种子配置），面板「从模板新建」用
+      return json(res, 200, existsSync(configPath) ? loadAgents() : []);
+    }
     if (p === "/api/agents" && req.method === "POST") {
       const body = (await readBody(req).then(JSON.parse)) as Partial<AgentDef>;
       const err = validateAgent(body);
