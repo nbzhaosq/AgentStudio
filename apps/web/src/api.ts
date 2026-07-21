@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   RoomInfo,
   ServerEvent,
+  SessionInfo,
 } from "@agent-studio/shared";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,6 +38,13 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agentIds }),
     }),
+  roomSessions: (roomId: string) =>
+    req<SessionInfo[]>(`/api/rooms/${roomId}/sessions`),
+  deleteRoomSession: (roomId: string, agentId?: string) =>
+    req<{ ok: boolean }>(
+      `/api/rooms/${roomId}/sessions${agentId ? `/${agentId}` : ""}`,
+      { method: "DELETE" },
+    ),
   messages: (roomId: string) =>
     req<ChatMessage[]>(`/api/rooms/${roomId}/messages`),
 };

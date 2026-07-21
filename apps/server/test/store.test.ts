@@ -77,8 +77,15 @@ describe("Store (SQLite)", () => {
     store.saveSession("r1", "b", "sess-2");
     store.saveSession("r1", "a", "sess-1b"); // 覆盖
     expect(store.getSessions("r1")).toEqual({ a: "sess-1b", b: "sess-2" });
+    const rows = store.getSessionRows("r1");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ agentId: "a", sessionId: "sess-1b" });
+    expect(rows[0].updatedAt).toBeGreaterThan(0);
     store.deleteSession("r1", "a");
     expect(store.getSessions("r1")).toEqual({ b: "sess-2" });
+    store.saveSession("r1", "a", "sess-3");
+    store.deleteRoomSessions("r1");
+    expect(store.getSessions("r1")).toEqual({});
     expect(store.getSessions("别的房间")).toEqual({});
   });
 

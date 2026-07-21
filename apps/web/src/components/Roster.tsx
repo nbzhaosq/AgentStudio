@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AgentInfo, AgentStatus } from "@agent-studio/shared";
+import type { AgentInfo, AgentStatus, SessionInfo } from "@agent-studio/shared";
 
 interface Props {
   agents: AgentInfo[];
@@ -7,9 +7,19 @@ interface Props {
   activities: Record<string, string[]>;
   candidates: AgentInfo[];
   onAddAgent: (agentId: string) => void;
+  sessions: SessionInfo[];
+  onResetSession: (agentId?: string) => void;
 }
 
-export default function Roster({ agents, statuses, activities, candidates, onAddAgent }: Props) {
+function timeAgo(ts: number): string {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return "刚刚";
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  return `${Math.floor(s / 86400)} 天前`;
+}
+
+export default function Roster({ agents, statuses, activities, candidates, onAddAgent, sessions, onResetSession }: Props) {
   const [picking, setPicking] = useState(false);
 
   return (
@@ -89,6 +99,46 @@ export default function Roster({ agents, statuses, activities, candidates, onAdd
           );
         })}
       </div>
+
+      {sessions.length > 0 && (
+        <div className="mt-5 border-t border-zinc-800 pt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              会话
+            </h3>
+            <button
+              className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+              title="清除所有 agent 的 CLI 会话，下一轮重新开局"
+              onClick={() => {
+                if (confirm("重开所有 agent 的会话？它们将丢失此前的对话记忆。")) {
+                  onResetSession();
+                }
+              }}
+            >
+              全部重开
+            </button>
+          </div>
+          {sessions.map((s) => (
+            <div key={s.agentId} className="group mb-1.5 flex items-center gap-1.5 text-[11px]">
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: s.color }}
+              />
+              <span className="truncate font-mono text-zinc-400" title={s.sessionId}>
+                {s.sessionId.slice(0, 12)}…
+              </span>
+              <span className="shrink-0 text-zinc-600">{timeAgo(s.updatedAt)}</span>
+              <button
+                className="ml-auto hidden rounded px-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 group-hover:block"
+                title="重开该 agent 的会话"
+                onClick={() => onResetSession(s.agentId)}
+              >
+                ↺
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

@@ -48,6 +48,15 @@ export interface RoomInfo {
 
 export type AgentStatus = "idle" | "thinking";
 
+/** GET /api/rooms/:id/sessions 的返回行 */
+export interface SessionInfo {
+  agentId: string;
+  name: string;
+  color: string;
+  sessionId: string;
+  updatedAt: number;
+}
+
 /** WebSocket 客户端 → 服务端 */
 export type ClientEvent = { type: "send_message"; roomId: string; text: string };
 
@@ -62,6 +71,7 @@ export type ServerEvent =
     }
   | { type: "agents_changed" }
   | { type: "rooms_changed" }
+  | { type: "sessions_changed"; roomId: string }
   | {
       /** 工作区文件变更活动（瞬态，不持久化）；agentId 为 null 表示多 agent 并发无法精确归属 */
       type: "agent_activity";

@@ -210,6 +210,26 @@ export class Store {
     return Object.fromEntries(rows.map((r) => [r.agent_id, r.session_id]));
   }
 
+  /** 带时间戳的会话行（管理界面用） */
+  getSessionRows(
+    roomId: string,
+  ): { agentId: string; sessionId: string; updatedAt: number }[] {
+    const rows = this.db
+      .prepare(
+        "SELECT agent_id, session_id, updated_at FROM room_sessions WHERE room_id = ? ORDER BY agent_id",
+      )
+      .all(roomId) as unknown as {
+      agent_id: string;
+      session_id: string;
+      updated_at: number;
+    }[];
+    return rows.map((r) => ({
+      agentId: r.agent_id,
+      sessionId: r.session_id,
+      updatedAt: r.updated_at,
+    }));
+  }
+
   saveSession(roomId: string, agentId: string, sessionId: string) {
     this.db
       .prepare(
@@ -226,6 +246,10 @@ export class Store {
     this.db
       .prepare("DELETE FROM room_sessions WHERE room_id = ? AND agent_id = ?")
       .run(roomId, agentId);
+  }
+
+  deleteRoomSessions(roomId: string) {
+    this.db.prepare("DELETE FROM room_sessions WHERE room_id = ?").run(roomId);
   }
 
   // ---------- 旧数据迁移 ----------

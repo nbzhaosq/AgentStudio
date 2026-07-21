@@ -4,6 +4,7 @@ import type {
   AgentStatus,
   ChatMessage,
   RoomInfo,
+  SessionInfo,
 } from "@agent-studio/shared";
 import { api, connectWS } from "./api";
 import Sidebar from "./components/Sidebar";
@@ -24,6 +25,7 @@ export default function App() {
   const [activities, setActivities] = useState<
     Record<string, Record<string, string[]>>
   >({});
+  const [sessions, setSessions] = useState<Record<string, SessionInfo[]>>({});
   const wsRef = useRef<WebSocket | null>(null);
 
   const refreshAgents = useCallback(() => api.agents().then(setAgents), []);
@@ -53,6 +55,10 @@ export default function App() {
         void refreshAgents();
       } else if (e.type === "rooms_changed") {
         void api.rooms().then(setRooms);
+      } else if (e.type === "sessions_changed") {
+        void api.roomSessions(e.roomId).then((ss) =>
+          setSessions((prev) => ({ ...prev, [e.roomId]: ss })),
+        );
       } else if (e.type === "agent_activity") {
         const key = e.agentId ?? "_ws";
         setActivities((prev) => {
@@ -69,6 +75,9 @@ export default function App() {
     if (!activeRoomId) return;
     void api.messages(activeRoomId).then((ms) =>
       setMessages((prev) => ({ ...prev, [activeRoomId]: ms })),
+    );
+    void api.roomSessions(activeRoomId).then((ss) =>
+      setSessions((prev) => ({ ...prev, [activeRoomId]: ss })),
     );
   }, [activeRoomId]);
 
@@ -95,6 +104,18 @@ export default function App() {
         .then((updated) =>
           setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
         );
+    },
+    [room],
+  );
+
+  const resetSession = useCallback(
+    (agentId?: string) => {
+      if (!room) return;
+      void api.deleteRoomSession(room.id, agentId).then(() =>
+        api.roomSessions(room.id).then((ss) =>
+          setSessions((prev) => ({ ...prev, [room.id]: ss })),
+        ),
+      );
     },
     [room],
   );
@@ -128,6 +149,8 @@ export default function App() {
             activities={activities[room.id] ?? {}}
             candidates={agents.filter((a) => !room.agentIds.includes(a.id))}
             onAddAgent={addAgentToRoom}
+            sessions={sessions[room.id] ?? []}
+            onResetSession={resetSession}
           />
         </>
       ) : (

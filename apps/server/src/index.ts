@@ -220,6 +220,30 @@ const server = createServer(async (req, res) => {
       broadcast({ type: "rooms_changed" });
       return json(res, 200, room.info);
     }
+    const sessionsMatch = p.match(/^\/api\/rooms\/([^/]+)\/sessions(?:\/([^/]+))?$/);
+    if (sessionsMatch && req.method === "GET" && !sessionsMatch[2]) {
+      const room = rooms.get(sessionsMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      const agentById = new Map(store.listAgents().map((a) => [a.id, a]));
+      const rows = store.getSessionRows(room.info.id).map((r) => ({
+        ...r,
+        name: agentById.get(r.agentId)?.name ?? r.agentId,
+        color: agentById.get(r.agentId)?.color ?? "#888888",
+      }));
+      return json(res, 200, rows);
+    }
+    if (sessionsMatch && req.method === "DELETE") {
+      const room = rooms.get(sessionsMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      if (sessionsMatch[2]) {
+        room.clearSession(sessionsMatch[2]);
+      } else {
+        room.clearAllSessions();
+        store.deleteRoomSessions(room.info.id);
+      }
+      broadcast({ type: "sessions_changed", roomId: room.info.id });
+      return json(res, 200, { ok: true });
+    }
     const msgMatch = p.match(/^\/api\/rooms\/([^/]+)\/messages$/);
     if (msgMatch && req.method === "GET") {
       const room = rooms.get(msgMatch[1]);

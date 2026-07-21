@@ -131,6 +131,18 @@ export class Room {
     this.record("system", "system", text);
   }
 
+  /** 清除某 agent 的 CLI 会话（下一轮重新开局） */
+  clearSession(agentId: string) {
+    this.sessions.delete(agentId);
+    this.deps.deleteSession(this.info.id, agentId);
+  }
+
+  /** 清除全房间的 CLI 会话 */
+  clearAllSessions() {
+    this.sessions.clear();
+    for (const a of this.agents) this.deps.deleteSession(this.info.id, a.id);
+  }
+
   /** 某 agent 最近改动的文件（测试与 prompt 用） */
   recentFilesOf(agentId: string): string[] {
     return this.recentFiles.get(agentId) ?? [];

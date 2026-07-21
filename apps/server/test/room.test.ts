@@ -285,6 +285,41 @@ describe("Room 路由", () => {
     expect(room.getMessages().some((m) => m.kind === "agent")).toBe(true);
   });
 
+  it("clearSession 后下一轮重新走全量 prompt", async () => {
+    const prompts: string[] = [];
+    const deleted: string[] = [];
+    const info: RoomInfo = {
+      id: "rc",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(
+      info,
+      [agentA],
+      [],
+      {
+        invoke: async (_a, prompt) => {
+          prompts.push(prompt);
+          return { text: "ok", sessionId: "sess-x" };
+        },
+        emit: () => {},
+        appendMessage: () => {},
+        deleteSession: (_r, a) => deleted.push(a),
+      },
+      { a: "sess-old" },
+    );
+    room.clearSession("a");
+    expect(deleted).toEqual(["a"]);
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    expect(prompts[0]).toContain("规则："); // 全量开局，而非增量
+
+    room.clearAllSessions();
+    expect(deleted).toEqual(["a", "a"]); // clearAll 对每个成员调一次
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(
