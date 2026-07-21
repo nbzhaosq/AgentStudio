@@ -22,10 +22,17 @@ const agent: AgentDef = {
 describe("Store (SQLite)", () => {
   it("agent upsert / list / get / delete", () => {
     const { store } = tmpStore();
-    store.upsertAgent({ ...agent, systemPrompt: "@AGENTS.test.md" });
+    store.upsertAgent({
+      ...agent,
+      systemPrompt: "@AGENTS.test.md",
+      sessionResumeArgs: ["-p", "{prompt}", "-r", "{sessionId}"],
+      sessionCapture: "sid:(\\w+)",
+    });
     const saved = store.getAgent("test-a");
     expect(saved).toMatchObject({ id: "test-a", cmd: "echo" });
     expect(saved?.systemPrompt).toBe("@AGENTS.test.md");
+    expect(saved?.sessionResumeArgs).toEqual(["-p", "{prompt}", "-r", "{sessionId}"]);
+    expect(saved?.sessionCapture).toBe("sid:(\\w+)");
 
     store.upsertAgent({ ...agent, name: "Renamed", args: ["a", "b"] });
     const got = store.getAgent("test-a");
@@ -61,6 +68,18 @@ describe("Store (SQLite)", () => {
     store.appendMessage(msg);
     expect(store.loadMessages("r1")).toEqual([msg]);
     expect(store.loadMessages("别的房间")).toEqual([]);
+  });
+
+  it("room sessions 的存取删", () => {
+    const { store } = tmpStore();
+    expect(store.getSessions("r1")).toEqual({});
+    store.saveSession("r1", "a", "sess-1");
+    store.saveSession("r1", "b", "sess-2");
+    store.saveSession("r1", "a", "sess-1b"); // 覆盖
+    expect(store.getSessions("r1")).toEqual({ a: "sess-1b", b: "sess-2" });
+    store.deleteSession("r1", "a");
+    expect(store.getSessions("r1")).toEqual({ b: "sess-2" });
+    expect(store.getSessions("别的房间")).toEqual({});
   });
 
   it("旧 JSONL 数据自动迁移", () => {

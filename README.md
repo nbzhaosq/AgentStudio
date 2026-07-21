@@ -10,6 +10,7 @@
 - 每个 agent 通过本机已安装的 CLI 的非交互模式调用（`claude -p`、`codex exec`、`kimi -p` 等），复用各 CLI 的登录态，不需要额外 API key。
 - 每个房间绑定一个项目目录，agent 在该目录内读写文件，共同完成项目。
 - 防死循环：一条用户消息引发的 @ 接力最多 12 跳，超限自动停止。
+- 会话续聊：每个（房间 × agent）维护一条持久的 CLI 会话。首轮注入完整上下文（规则、名册、对话记录），续聊轮只带增量（自该 agent 上次发言后的新消息 + 触发消息），大幅降低 token 开销并保留 agent 的工作记忆；续聊失败自动降级为全量调用并重开会话。
 - 聊天室只承载讨论与决策：agent 被要求干活后只汇报摘要（做了什么/改了哪些文件/关键决策），不贴大段代码；UI 对长消息默认折叠。
 - 工作可见性：server 监听房间目录的文件变更，实时广播"谁在动哪些文件"（同一时刻单 agent 运行时精确归属），展示在名册与消息流的工作指示中；其他 agent 被触发时也能在 prompt 里看到房间当前状态。
 
@@ -65,7 +66,19 @@ agents 存储在 SQLite（`~/.agent-studio/studio.db`）中，可直接在 Web U
 
 在「⚙ Agents」面板中编辑，或在 `agents.config.json` 种子里写 `systemPrompt` 字段。
 
-### CLI 原生 skills
+### 会话续聊（sessionResumeArgs 等）
+
+agent 声明以下三个可选字段即启用续聊（缺省保持无状态模式）：
+
+| 字段 | 作用 |
+| --- | --- |
+| `sessionStartArgs` | 首轮调用模板，含 `{sessionId}` 占位（适配层生成 UUID），用于"钉 id"型 CLI |
+| `sessionResumeArgs` | 续聊调用模板，含 `{sessionId}` 占位 |
+| `sessionCapture` | 正则，从首轮输出中捕获会话 id（kimi/hermes/codex 这类"捕获 id"型） |
+
+内置预设的续聊方式：claude/qoder 用 `--session-id` 钉 id；pi 的 `--session-id` 建续同参；kimi/hermes/codex 从输出捕获 id 后 `-S`/`--resume`/`exec resume`；omp/opencode 用 `-c`（按 cwd 续最近会话——同一目录多房间时会串话，介意的话给这些 agent 换独立会话参数）。
+
+会话状态存于 `room_sessions` 表；想重开某 agent 的会话，删除对应行或直接删表即可。
 
 各 CLI 自己的技能机制直接写进 `args` 即可，例如：
 
@@ -144,7 +157,6 @@ pnpm -r build
 
 ## 当前限制（v1）
 
-- 无状态逐轮调用：每轮把最近 30 条消息注入 prompt，不做 CLI 会话续聊；
 - 只看完整回复，不做逐字 streaming；
 - 单用户、无账号体系。
 

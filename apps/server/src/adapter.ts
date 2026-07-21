@@ -2,38 +2,78 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { AgentConfig } from "./config.js";
 import { serverRoot } from "./config.js";
 
 /** 单次调用超时，默认 10 分钟，可用环境变量覆盖 */
 const TIMEOUT_MS = Number(process.env.AGENT_STUDIO_TIMEOUT_MS ?? 10 * 60 * 1000);
 
+export interface InvokeResult {
+  text: string;
+  /** 本轮建立/确认了的 CLI 会话 id（用于后续续聊） */
+  sessionId?: string;
+}
+
+/** 用变量表替换 args 模板中的占位符 */
+export function buildArgs(template: string[], vars: Record<string, string>): string[] {
+  return template.map((a) => {
+    let out = a;
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.replaceAll(`{${k}}`, v);
+    }
+    return out;
+  });
+}
+
+/** 用配置的正则从输出中捕获 session id */
+export function captureSessionId(
+  pattern: string | undefined,
+  output: string,
+): string | undefined {
+  if (!pattern) return undefined;
+  const m = output.match(new RegExp(pattern));
+  return m?.[1];
+}
+
 /**
- * 调用一个 CLI agent：按 args 模板替换占位符后 spawn，
- * 返回其最终回复文本。
+ * 调用一个 CLI agent。
  *
- * 占位符：
- * - {prompt}    本轮完整 prompt（作为单个 argv 元素传入，无 shell 转义问题）
- * - {outfile}   临时文件路径；若模板使用了它，回复从该文件读取（如 codex -o）
- * - {cwd}       房间工作目录
- * - {serverRoot} server 代码根目录（用于定位内置脚本）
+ * 会话续聊语义：
+ * - 传入 sessionId 且 agent 声明了 sessionResumeArgs → 用续聊模板；
+ * - 未传入且声明了 sessionStartArgs → 生成 UUID 钉住新会话（钉 id 型）；
+ * - 否则用普通 args，若声明了 sessionCapture 则从输出捕获会话 id（捕获型）。
+ *
+ * 占位符：{prompt} {outfile} {cwd} {serverRoot} {sessionId}
  */
 export function invokeAgent(
   agent: AgentConfig,
   prompt: string,
   cwd: string,
-): Promise<string> {
-  const usesOutfile = agent.args.some((a) => a.includes("{outfile}"));
-  const outDir = usesOutfile ? mkdtempSync(path.join(tmpdir(), "agent-studio-")) : null;
+  sessionId?: string,
+): Promise<InvokeResult> {
+  let template = agent.args;
+  let pinnedId: string | undefined;
+  if (sessionId && agent.sessionResumeArgs) {
+    template = agent.sessionResumeArgs;
+  } else if (!sessionId && agent.sessionStartArgs) {
+    pinnedId = randomUUID();
+    template = agent.sessionStartArgs;
+  }
+
+  const usesOutfile = template.some((a) => a.includes("{outfile}"));
+  const outDir = usesOutfile
+    ? mkdtempSync(path.join(tmpdir(), "agent-studio-"))
+    : null;
   const outfile = outDir ? path.join(outDir, "reply.txt") : "";
 
-  const args = agent.args.map((a) =>
-    a
-      .replaceAll("{prompt}", prompt)
-      .replaceAll("{outfile}", outfile)
-      .replaceAll("{cwd}", cwd)
-      .replaceAll("{serverRoot}", serverRoot),
-  );
+  const args = buildArgs(template, {
+    prompt,
+    outfile,
+    cwd,
+    serverRoot,
+    sessionId: sessionId ?? pinnedId ?? "",
+  });
 
   return new Promise((resolve, reject) => {
     const child = spawn(agent.cmd, args, {
@@ -85,7 +125,12 @@ export function invokeAgent(
         );
         return;
       }
-      resolve(reply);
+      resolve({
+        text: reply,
+        // 捕获型 CLI 的会话 id 提示有的走 stdout（codex/hermes），有的走 stderr（kimi）
+        sessionId:
+          pinnedId ?? captureSessionId(agent.sessionCapture, `${stdout}\n${stderr}`),
+      });
     });
   });
 }

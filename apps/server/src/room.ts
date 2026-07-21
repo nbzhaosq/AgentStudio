@@ -10,16 +10,22 @@ import {
 } from "@agent-studio/shared";
 import type { AgentConfig } from "./config.js";
 
+export type InvokeReply = string | { text: string; sessionId?: string };
+
 export type InvokeFn = (
   agent: AgentConfig,
   prompt: string,
   cwd: string,
-) => Promise<string>;
+  sessionId?: string,
+) => Promise<InvokeReply>;
 
 export interface RoomDeps {
   invoke: InvokeFn;
   emit: (event: ServerEvent) => void;
   appendMessage: (msg: ChatMessage) => void;
+  /** 会话续聊持久化（可选，缺省不存） */
+  saveSession?: (roomId: string, agentId: string, sessionId: string) => void;
+  deleteSession?: (roomId: string, agentId: string) => void;
   /** 一条用户消息引发的 @ 接力上限，默认 12 */
   maxHops?: number;
   /** prompt 中携带的最近消息条数，默认 30 */
@@ -47,6 +53,10 @@ export class Room {
   private messages: ChatMessage[] = [];
   private queues = new Map<string, Turn[]>();
   private running = new Set<string>();
+  /** agentId → CLI 会话 id（续聊用） */
+  private sessions: Map<string, string>;
+  /** agentId → 上次发言时间戳（增量 prompt 截取用） */
+  private lastTurnAt = new Map<string, number>();
   private watcher?: FSWatcher;
   /** agentId → 最近改动文件（最新在后，上限 10） */
   private recentFiles = new Map<string, string[]>();
@@ -58,14 +68,21 @@ export class Room {
     agents: AgentConfig[],
     history: ChatMessage[],
     deps: RoomDeps,
+    sessions?: Record<string, string>,
   ) {
     this.info = info;
     this.agents = agents;
     this.messages = history;
+    this.sessions = new Map(Object.entries(sessions ?? {}));
+    for (const m of history) {
+      if (m.kind === "agent") this.lastTurnAt.set(m.author, m.ts);
+    }
     this.deps = {
       invoke: deps.invoke,
       emit: deps.emit,
       appendMessage: deps.appendMessage,
+      saveSession: deps.saveSession ?? (() => {}),
+      deleteSession: deps.deleteSession ?? (() => {}),
       maxHops: deps.maxHops ?? 12,
       transcriptWindow: deps.transcriptWindow ?? 30,
       activityFlushMs: deps.activityFlushMs ?? 800,
@@ -194,6 +211,7 @@ export class Room {
       ts: Date.now(),
     };
     this.messages.push(msg);
+    if (kind === "agent") this.lastTurnAt.set(author, msg.ts);
     this.deps.appendMessage(msg);
     this.deps.emit({ type: "message", message: msg });
     return msg;
@@ -235,18 +253,39 @@ export class Room {
   private async runTurn(agentId: string, turn: Turn) {
     const agent = this.agents.find((a) => a.id === agentId);
     if (!agent) return;
-    const prompt = this.buildPrompt(agent, turn.trigger);
-    let reply: string;
+    const sessionId = this.sessions.get(agentId);
+    const prompt = sessionId
+      ? this.buildIncrementalPrompt(agent, turn.trigger)
+      : this.buildPrompt(agent, turn.trigger);
+
+    let result: { text: string; sessionId?: string };
     try {
-      reply = await this.deps.invoke(agent, prompt, this.info.cwd);
+      result = await this.call(agent, prompt, sessionId);
     } catch (err) {
-      this.record(
-        "system",
-        "system",
-        `⚠️ ${agent.name} 调用失败：${err instanceof Error ? err.message : String(err)}`,
+      if (!sessionId) {
+        this.fail(agent, err);
+        return;
+      }
+      // 续聊失败（会话过期/丢失等）：清掉会话，降级为全量无状态调用重试一次
+      console.warn(
+        `[room ${this.info.id}] @${agentId} 续聊失败，降级为全量调用:`,
+        err instanceof Error ? err.message : err,
       );
-      return;
+      this.sessions.delete(agentId);
+      this.deps.deleteSession(this.info.id, agentId);
+      try {
+        result = await this.call(agent, this.buildPrompt(agent, turn.trigger));
+      } catch (err2) {
+        this.fail(agent, err2);
+        return;
+      }
     }
+
+    if (result.sessionId) {
+      this.sessions.set(agentId, result.sessionId);
+      this.deps.saveSession(this.info.id, agentId, result.sessionId);
+    }
+    const reply = result.text;
     if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
 
     const msg = this.record(agent.id, "agent", reply);
@@ -264,6 +303,51 @@ export class Room {
     for (const targetId of targets) {
       this.enqueue(targetId, { trigger: msg, chainId: turn.chainId, hop });
     }
+  }
+
+  private async call(
+    agent: AgentConfig,
+    prompt: string,
+    sessionId?: string,
+  ): Promise<{ text: string; sessionId?: string }> {
+    const res = await this.deps.invoke(agent, prompt, this.info.cwd, sessionId);
+    return typeof res === "string" ? { text: res } : res;
+  }
+
+  private fail(agent: AgentConfig, err: unknown) {
+    this.record(
+      "system",
+      "system",
+      `⚠️ ${agent.name} 调用失败：${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  /** 续聊轮 prompt：只带自该 agent 上次发言后的增量消息（CLI 会话里已有完整上下文） */
+  private buildIncrementalPrompt(agent: AgentConfig, trigger: ChatMessage): string {
+    const since = this.lastTurnAt.get(agent.id) ?? 0;
+    const gap = this.messages
+      .filter((m) => m.ts > since && m.author !== agent.id && m.id !== trigger.id)
+      .slice(-20);
+    const gapText = gap
+      .map((m) => {
+        const who =
+          m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
+        const text =
+          m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
+        return `[${who}]: ${text}`;
+      })
+      .join("\n\n");
+
+    return `你是 ${agent.name}（@${agent.id}），继续之前的协作（完整规则、角色设定与更早的对话见本会话开头）。
+房间目录：${this.info.cwd}
+
+=== 自你上次发言后房间里的新消息 ===
+${gapText || "（无）"}
+
+=== TRIGGER（需要你现在回应的消息） ===
+[${trigger.kind === "user" ? "user" : `@${trigger.author}`}]: ${trigger.text}
+
+现在轮到你发言。只输出你要发到聊天室里的内容，不要加任何前缀或解释。`;
   }
 
   private buildPrompt(agent: AgentConfig, trigger: ChatMessage): string {

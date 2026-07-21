@@ -13,6 +13,15 @@ export interface AgentDef extends AgentInfo {
   args: string[];
   /** 专属 system prompt；以 @ 开头时视为文件路径（相对房间目录或绝对路径），每轮读取其内容 */
   systemPrompt?: string;
+  /**
+   * 会话续聊（可选，三者共同构成能力声明）：
+   * - sessionStartArgs：首轮调用模板（钉 id 型 CLI 用，含 {sessionId} 占位，由适配层生成 UUID）
+   * - sessionResumeArgs：续聊调用模板（含 {sessionId} 占位）；缺省表示不支持续聊
+   * - sessionCapture：从首轮输出中捕获 session id 的正则（捕获型 CLI 用，如 kimi/hermes/codex）
+   */
+  sessionStartArgs?: string[];
+  sessionResumeArgs?: string[];
+  sessionCapture?: string;
 }
 
 export type MessageKind = "user" | "agent" | "system";

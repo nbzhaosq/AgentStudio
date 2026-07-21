@@ -212,6 +212,79 @@ describe("Room 路由", () => {
     expect(aPrompt).toContain("src/x.ts");
   });
 
+  it("会话续聊：第二轮带 sessionId 且 prompt 只含增量", async () => {
+    const calls: { sessionId?: string; prompt: string }[] = [];
+    const saved: string[][] = [];
+    const info: RoomInfo = {
+      id: "rs",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke: async (_a, prompt, _cwd, sessionId) => {
+        calls.push({ sessionId, prompt });
+        return { text: "ok", sessionId: "sess-1" };
+      },
+      emit: () => {},
+      appendMessage: () => {},
+      saveSession: (_r, a, s) => saved.push([a, s]),
+    });
+    await room.postUserMessage("@a 第一条");
+    await waitSettled(room);
+    await room.postUserMessage("@a 第二条");
+    await waitSettled(room);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].sessionId).toBeUndefined(); // 首轮无会话
+    expect(calls[1].sessionId).toBe("sess-1"); // 第二轮续聊
+    expect(calls[1].prompt).toContain("继续之前的协作");
+    expect(calls[1].prompt).toContain("第二条");
+    expect(calls[1].prompt).not.toContain("规则："); // 非全量 prompt
+    expect(saved).toEqual([["a", "sess-1"], ["a", "sess-1"]]);
+  });
+
+  it("续聊失败自动降级为全量调用并重开会话", async () => {
+    const prompts: string[] = [];
+    let deleted = "";
+    const saved: string[] = [];
+    const info: RoomInfo = {
+      id: "rs2",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(
+      info,
+      [agentA],
+      [],
+      {
+        invoke: async (_a, prompt, _cwd, sessionId) => {
+          prompts.push(prompt);
+          if (sessionId === "old-sess") throw new Error("session expired");
+          return { text: "ok", sessionId: "new-sess" };
+        },
+        emit: () => {},
+        appendMessage: () => {},
+        saveSession: (_r, _a, s) => saved.push(s),
+        deleteSession: (_r, a) => {
+          deleted = a;
+        },
+      },
+      { a: "old-sess" },
+    );
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("继续之前的协作"); // 先试续聊
+    expect(prompts[1]).toContain("规则："); // 降级为全量
+    expect(deleted).toBe("a"); // 旧会话已清
+    expect(saved).toEqual(["new-sess"]); // 新会话已存
+    expect(room.getMessages().some((m) => m.kind === "agent")).toBe(true);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

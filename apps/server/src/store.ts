@@ -46,6 +46,13 @@ export class Store {
         ts INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, ts);
+      CREATE TABLE IF NOT EXISTS room_sessions (
+        room_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (room_id, agent_id)
+      );
     `);
     // 老库迁移：补充 system_prompt 列
     const agentCols = this.db
@@ -54,6 +61,12 @@ export class Store {
       .map((r) => (r as { name: string }).name);
     if (!agentCols.includes("system_prompt")) {
       this.db.exec("ALTER TABLE agents ADD COLUMN system_prompt TEXT");
+    }
+    // 老库迁移：补充会话续聊列
+    if (!agentCols.includes("session_start_args")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN session_start_args TEXT");
+      this.db.exec("ALTER TABLE agents ADD COLUMN session_resume_args TEXT");
+      this.db.exec("ALTER TABLE agents ADD COLUMN session_capture TEXT");
     }
     this.migrateLegacyJsonl();
   }
@@ -72,6 +85,13 @@ export class Store {
       args: JSON.parse(r.args as string) as string[],
       instructions: (r.instructions as string | null) ?? undefined,
       systemPrompt: (r.system_prompt as string | null) ?? undefined,
+      sessionStartArgs: r.session_start_args
+        ? (JSON.parse(r.session_start_args as string) as string[])
+        : undefined,
+      sessionResumeArgs: r.session_resume_args
+        ? (JSON.parse(r.session_resume_args as string) as string[])
+        : undefined,
+      sessionCapture: (r.session_capture as string | null) ?? undefined,
     }));
   }
 
@@ -82,15 +102,18 @@ export class Store {
   upsertAgent(agent: AgentDef) {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, session_start_args, session_resume_args, session_capture, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            color = excluded.color,
            cmd = excluded.cmd,
            args = excluded.args,
            instructions = excluded.instructions,
-           system_prompt = excluded.system_prompt`,
+           system_prompt = excluded.system_prompt,
+           session_start_args = excluded.session_start_args,
+           session_resume_args = excluded.session_resume_args,
+           session_capture = excluded.session_capture`,
       )
       .run(
         agent.id,
@@ -100,6 +123,9 @@ export class Store {
         JSON.stringify(agent.args),
         agent.instructions ?? null,
         agent.systemPrompt ?? null,
+        agent.sessionStartArgs ? JSON.stringify(agent.sessionStartArgs) : null,
+        agent.sessionResumeArgs ? JSON.stringify(agent.sessionResumeArgs) : null,
+        agent.sessionCapture ?? null,
         Date.now(),
       );
   }
@@ -173,6 +199,33 @@ export class Store {
       mentions: JSON.parse(r.mentions as string) as string[],
       ts: r.ts as number,
     }));
+  }
+
+  // ---------- room sessions（agent 的 CLI 会话续聊状态） ----------
+
+  getSessions(roomId: string): Record<string, string> {
+    const rows = this.db
+      .prepare("SELECT agent_id, session_id FROM room_sessions WHERE room_id = ?")
+      .all(roomId) as unknown as { agent_id: string; session_id: string }[];
+    return Object.fromEntries(rows.map((r) => [r.agent_id, r.session_id]));
+  }
+
+  saveSession(roomId: string, agentId: string, sessionId: string) {
+    this.db
+      .prepare(
+        `INSERT INTO room_sessions (room_id, agent_id, session_id, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(room_id, agent_id) DO UPDATE SET
+           session_id = excluded.session_id,
+           updated_at = excluded.updated_at`,
+      )
+      .run(roomId, agentId, sessionId, Date.now());
+  }
+
+  deleteSession(roomId: string, agentId: string) {
+    this.db
+      .prepare("DELETE FROM room_sessions WHERE room_id = ? AND agent_id = ?")
+      .run(roomId, agentId);
   }
 
   // ---------- 旧数据迁移 ----------

@@ -5,7 +5,9 @@
       "name": "Claude",
       "color": "#d97706",
       "cmd": "claude",
-      "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits"]
+      "args": ["-p", "{prompt}", "--permission-mode", "acceptEdits"],
+      "sessionStartArgs": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "--session-id", "{sessionId}"],
+      "sessionResumeArgs": ["-p", "{prompt}", "--permission-mode", "acceptEdits", "-r", "{sessionId}"]
     },
     {
       "id": "codex",
@@ -18,44 +20,63 @@
         "--sandbox",
         "workspace-write",
         "--skip-git-repo-check",
+        "--json",
         "-o",
         "{outfile}"
-      ]
+      ],
+      "sessionResumeArgs": [
+        "exec",
+        "resume",
+        "{sessionId}",
+        "{prompt}",
+        "--skip-git-repo-check",
+        "-o",
+        "{outfile}"
+      ],
+      "sessionCapture": "\"thread_id\":\"([^\"]+)\""
     },
     {
       "id": "kimi",
       "name": "Kimi",
       "color": "#3b82f6",
       "cmd": "kimi",
-      "args": ["-p", "{prompt}"]
+      "args": ["-p", "{prompt}"],
+      "sessionResumeArgs": ["-p", "{prompt}", "-S", "{sessionId}"],
+      "sessionCapture": "kimi -r (session_[a-z0-9-]+)"
     },
     {
       "id": "qoder",
       "name": "Qoder",
       "color": "#f43f5e",
       "cmd": "qodercli",
-      "args": ["-p", "--permission-mode", "auto", "{prompt}"]
+      "args": ["-p", "--permission-mode", "auto", "{prompt}"],
+      "sessionStartArgs": ["-p", "--permission-mode", "auto", "--session-id", "{sessionId}", "{prompt}"],
+      "sessionResumeArgs": ["-p", "--permission-mode", "auto", "-r", "{sessionId}", "{prompt}"]
     },
     {
       "id": "opencode",
       "name": "OpenCode",
       "color": "#14b8a6",
       "cmd": "opencode",
-      "args": ["run", "{prompt}"]
+      "args": ["run", "{prompt}"],
+      "sessionResumeArgs": ["run", "{prompt}", "-c"]
     },
     {
       "id": "omp",
       "name": "OhMyPi",
       "color": "#84cc16",
       "cmd": "omp",
-      "args": ["-p", "{prompt}"]
+      "args": ["-p", "{prompt}"],
+      "sessionResumeArgs": ["-p", "{prompt}", "-c"]
     },
     {
       "id": "pi",
       "name": "Pi",
       "color": "#6366f1",
       "cmd": "pi",
-      "args": ["-p", "{prompt}"]
+      "args": ["-p", "{prompt}"],
+      "sessionStartArgs": ["-p", "{prompt}", "--session-id", "{sessionId}"],
+      "sessionResumeArgs": ["-p", "{prompt}", "--session-id", "{sessionId}"]
     },
     {
       "id": "openclaw",
@@ -69,7 +90,9 @@
       "name": "Hermes",
       "color": "#0ea5e9",
       "cmd": "hermes",
-      "args": ["chat", "-q", "{prompt}", "-Q", "--yolo"]
+      "args": ["chat", "-q", "{prompt}", "-Q", "--yolo"],
+      "sessionResumeArgs": ["chat", "-q", "{prompt}", "-Q", "--yolo", "--resume", "{sessionId}"],
+      "sessionCapture": "session_id: ([a-z0-9_]+)"
     },
     {
       "id": "mock-a",

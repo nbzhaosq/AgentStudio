@@ -18,6 +18,21 @@ if (store.listAgents().length === 0 && existsSync(configPath)) {
   store.importAgents(loadAgents());
   console.log(`已从 ${configPath} 导入 agents 种子配置`);
 }
+// 老库升级：种子里的会话续聊字段补到已存在但缺少这些字段的 agent 上（不覆盖用户其他设置）
+if (existsSync(configPath)) {
+  const seedById = new Map(loadAgents().map((a) => [a.id, a]));
+  for (const a of store.listAgents()) {
+    const seed = seedById.get(a.id);
+    if (seed && !a.sessionResumeArgs && seed.sessionResumeArgs) {
+      store.upsertAgent({
+        ...a,
+        sessionStartArgs: seed.sessionStartArgs,
+        sessionResumeArgs: seed.sessionResumeArgs,
+        sessionCapture: seed.sessionCapture,
+      });
+    }
+  }
+}
 
 const sockets = new Set<WebSocket>();
 function broadcast(event: ServerEvent) {
@@ -33,13 +48,23 @@ function makeRoomDeps() {
     emit: broadcast,
     appendMessage: (m: Parameters<Store["appendMessage"]>[0]) =>
       store.appendMessage(m),
+    saveSession: (roomId: string, agentId: string, sessionId: string) =>
+      store.saveSession(roomId, agentId, sessionId),
+    deleteSession: (roomId: string, agentId: string) =>
+      store.deleteSession(roomId, agentId),
   };
 }
 
 const rooms = new Map<string, Room>();
 for (const info of store.loadRooms()) {
   const all = store.listAgents();
-  const room = new Room(info, [], store.loadMessages(info.id), makeRoomDeps());
+  const room = new Room(
+    info,
+    [],
+    store.loadMessages(info.id),
+    makeRoomDeps(),
+    store.getSessions(info.id),
+  );
   room.syncAgents(all);
   rooms.set(info.id, room);
 }
@@ -119,6 +144,9 @@ const server = createServer(async (req, res) => {
         args: body.args!,
         instructions: body.instructions?.trim() || undefined,
         systemPrompt: body.systemPrompt?.trim() || undefined,
+        sessionStartArgs: body.sessionStartArgs,
+        sessionResumeArgs: body.sessionResumeArgs,
+        sessionCapture: body.sessionCapture,
       };
       store.upsertAgent(agent);
       onAgentsChanged();
