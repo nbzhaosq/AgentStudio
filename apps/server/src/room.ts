@@ -296,6 +296,7 @@ export class Room {
     if (result.sessionId) {
       this.sessions.set(agentId, result.sessionId);
       this.deps.saveSession(this.info.id, agentId, result.sessionId);
+      this.deps.emit({ type: "sessions_changed", roomId: this.info.id });
     }
     const reply = result.text;
     if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
