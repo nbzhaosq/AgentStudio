@@ -174,7 +174,7 @@ export default function App() {
             <circle cx="11" cy="18" r="3" fill="#facc15" opacity="0.85" />
             <path d="M8.5 7.5 15 8M7 9l3 6.5M16.5 10.5 12.5 15.5" stroke="#52525b" strokeWidth="1.2" />
           </svg>
-          <p className="text-sm text-zinc-500">创建或选择一个房间开始</p>
+          <p className="text-sm text-text-3">创建或选择一个房间开始</p>
         </div>
       )}
       {showAgents && (

@@ -155,28 +155,28 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
   }
 
   const inputCls = "field";
-  const labelCls = "mb-1 block text-[11px] text-zinc-500";
+  const labelCls = "mb-1 block text-[11px] text-text-3";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="flex h-[34rem] w-[50rem] overflow-hidden rounded-xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/60"
+        className="flex h-[34rem] w-[50rem] overflow-hidden rounded-xl border border-line2 bg-panel2 shadow-2xl shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 左侧列表 */}
-        <div className="flex w-60 shrink-0 flex-col border-r border-white/6 p-3">
+        <div className="flex w-60 shrink-0 flex-col border-r border-line p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="micro-label">Agents</h2>
             <div className="flex gap-1">
               <button
-                className="rounded-md border border-white/8 bg-white/4 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:border-white/20"
+                className="rounded-md border border-line bg-hover px-1.5 py-0.5 text-[10px] text-text-2 hover:border-line2"
                 title="导出全部为 agents.config.json 格式（复制到剪贴板）"
                 onClick={exportAll}
               >
                 导出
               </button>
               <button
-                className="rounded-md border border-white/8 bg-white/4 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:border-white/20"
+                className="rounded-md border border-line bg-hover px-1.5 py-0.5 text-[10px] text-text-2 hover:border-line2"
                 onClick={() => {
                   setBulkText(JSON.stringify({ agents: [presets[0] ?? EMPTY] }, null, 2));
                   setPane("bulk");
@@ -220,13 +220,13 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
               <button
                 key={a.id}
                 onClick={() => startEdit(a)}
-                className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/6 ${
-                  editing?.id === a.id ? "bg-white/8" : ""
+                className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-active ${
+                  editing?.id === a.id ? "bg-active" : ""
                 }`}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: a.color }} />
                 <span className="truncate font-mono text-xs">@{a.id}</span>
-                <span className="truncate text-[10px] text-zinc-600">{a.cmd}</span>
+                <span className="truncate text-[10px] text-text-4">{a.cmd}</span>
               </button>
             ))}
           </div>
@@ -237,7 +237,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
         <div className="flex-1 overflow-y-auto p-4">
           {pane === "bulk" ? (
             <div className="space-y-3">
-              <h3 className="font-display text-sm font-semibold text-zinc-200">
+              <h3 className="font-display text-sm font-semibold text-text-1">
                 批量导入（与 agents.config.json 同格式）
               </h3>
               <textarea
@@ -250,14 +250,14 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2">
                 <button
-                  className="rounded-lg bg-signal/85 px-4 py-1.5 text-sm font-medium text-ink-950 hover:bg-signal disabled:opacity-40"
+                  className="rounded-lg bg-signal/85 px-4 py-1.5 text-sm font-medium text-accent-fg hover:bg-signal disabled:opacity-40"
                   disabled={busy}
                   onClick={() => void importBulk()}
                 >
                   导入（逐个覆盖同名 id）
                 </button>
                 <button
-                  className="rounded-lg border border-white/8 bg-white/4 px-4 py-1.5 text-sm text-zinc-300 hover:border-white/20"
+                  className="rounded-lg border border-line bg-hover px-4 py-1.5 text-sm text-text-2 hover:border-line2"
                   onClick={() => setPane("form")}
                 >
                   取消
@@ -267,15 +267,15 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
           ) : editing ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <h3 className="font-display text-sm font-semibold text-zinc-200">
+                <h3 className="font-display text-sm font-semibold text-text-1">
                   {isNew ? "新建 agent" : `编辑 @${editing.id}`}
                 </h3>
-                <div className="flex overflow-hidden rounded-lg border border-white/10">
+                <div className="flex overflow-hidden rounded-lg border border-line2">
                   {(["form", "json"] as const).map((m) => (
                     <button
                       key={m}
                       className={`px-3 py-1 font-mono text-[11px] transition-colors ${
-                        pane === m ? "bg-signal/20 text-signal" : "text-zinc-400 hover:bg-white/4"
+                        pane === m ? "bg-signal/20 text-signal" : "text-text-3 hover:bg-hover"
                       }`}
                       onClick={() => switchPane(m)}
                     >
@@ -330,7 +330,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                       <span className={labelCls}>颜色</span>
                       <input
                         type="color"
-                        className="h-8 w-full cursor-pointer rounded-lg border border-white/5 bg-ink-900"
+                        className="h-8 w-full cursor-pointer rounded-lg border border-line bg-panel"
                         value={editing.color}
                         onChange={(e) => setEditing({ ...editing, color: e.target.value })}
                       />
@@ -376,13 +376,13 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                   </label>
 
                   <button
-                    className="font-mono text-[11px] text-zinc-500 hover:text-zinc-300"
+                    className="font-mono text-[11px] text-text-3 hover:text-text-2"
                     onClick={() => setShowAdvanced((v) => !v)}
                   >
                     {showAdvanced ? "▾" : "▸"} 会话续聊（高级）
                   </button>
                   {showAdvanced && (
-                    <div className="space-y-3 rounded-lg border border-white/6 p-3">
+                    <div className="space-y-3 rounded-lg border border-line p-3">
                       <label className="block">
                         <span className={labelCls}>sessionStartArgs（首轮，每行一个）</span>
                         <textarea
@@ -422,7 +422,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button
-                  className="rounded-lg bg-signal/85 px-4 py-1.5 font-medium text-ink-950 hover:bg-signal disabled:opacity-40"
+                  className="rounded-lg bg-signal/85 px-4 py-1.5 font-medium text-accent-fg hover:bg-signal disabled:opacity-40"
                   disabled={busy}
                   onClick={() => void save()}
                 >
@@ -437,7 +437,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                   </button>
                 )}
                 <button
-                  className="rounded-lg border border-white/8 bg-white/4 px-4 py-1.5 text-zinc-300 hover:border-white/20"
+                  className="rounded-lg border border-line bg-hover px-4 py-1.5 text-text-2 hover:border-line2"
                   onClick={() => setEditing(null)}
                 >
                   取消
@@ -445,7 +445,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
               </div>
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+            <div className="flex h-full items-center justify-center text-sm text-text-4">
               选择左侧 agent 进行编辑，或从模板新建
             </div>
           )}

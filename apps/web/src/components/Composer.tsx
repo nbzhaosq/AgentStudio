@@ -65,7 +65,7 @@ export default function Composer({ agents, onSend }: Props) {
         </div>
       )}
       {suggest.length > 0 && (
-        <div className="absolute bottom-full left-5 mb-2 overflow-hidden rounded-xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50">
+        <div className="absolute bottom-full left-5 mb-2 overflow-hidden rounded-xl border border-line2 bg-panel2 shadow-2xl shadow-black/50">
           {suggest.map((a) => (
             <button
               key={a.id}
@@ -73,24 +73,24 @@ export default function Composer({ agents, onSend }: Props) {
                 e.preventDefault();
                 pick(a);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/6"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-active"
             >
               <span
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: a.color }}
               />
               <span className="font-mono">@{a.id}</span>
-              <span className="text-xs text-zinc-500">{a.name}</span>
+              <span className="text-xs text-text-3">{a.name}</span>
             </button>
           ))}
         </div>
       )}
 
-      <div className="flex items-end gap-2 rounded-xl border border-white/8 bg-ink-850 p-2 transition-colors focus-within:border-signal/35">
+      <div className="flex items-end gap-2 rounded-xl border border-line bg-panel2 p-2 transition-colors focus-within:border-signal/35">
         <textarea
           ref={taRef}
           rows={2}
-          className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed outline-none placeholder:text-zinc-600"
+          className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed outline-none placeholder:text-text-4"
           placeholder={`发消息… @ 呼叫 agent，@all 全员集合`}
           value={text}
           onChange={(e) => {
@@ -114,14 +114,14 @@ export default function Composer({ agents, onSend }: Props) {
           }}
         />
         <div className="flex items-center gap-2">
-          <span className="hidden font-mono text-[10px] text-zinc-600 sm:block">
+          <span className="hidden font-mono text-[10px] text-text-4 sm:block">
             Enter ⏎
           </span>
           <button
             className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
               canSend
-                ? "bg-signal text-ink-950 hover:bg-cyan-300"
-                : "bg-white/6 text-zinc-600"
+                ? "bg-signal text-accent-fg hover:bg-cyan-300"
+                : "bg-active text-text-4"
             }`}
             disabled={!canSend}
             onClick={send}
