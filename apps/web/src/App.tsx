@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   RoomInfo,
   SessionInfo,
+  Task,
 } from "@agent-studio/shared";
 import { api, connectWS } from "./api";
 import Sidebar from "./components/Sidebar";
@@ -26,6 +27,10 @@ export default function App() {
     Record<string, Record<string, string[]>>
   >({});
   const [sessions, setSessions] = useState<Record<string, SessionInfo[]>>({});
+  const [tasks, setTasks] = useState<Record<string, Task[]>>({});
+  const [branches, setBranches] = useState<
+    Record<string, { agentId: string; files: number; insertions: number; deletions: number }[]>
+  >({});
   /** roomId → agentId → 流式草稿 */
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
   const [streaming, setStreaming] = useState(
@@ -34,6 +39,12 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const refreshAgents = useCallback(() => api.agents().then(setAgents), []);
+  const refreshTasks = useCallback((roomId: string) => {
+    void api.tasks(roomId).then((ts) => setTasks((prev) => ({ ...prev, [roomId]: ts })));
+  }, []);
+  const refreshBranches = useCallback((roomId: string) => {
+    void api.branches(roomId).then((bs) => setBranches((prev) => ({ ...prev, [roomId]: bs })));
+  }, []);
 
   useEffect(() => {
     void refreshAgents();
@@ -71,10 +82,14 @@ export default function App() {
           ...prev,
           [e.roomId]: { ...(prev[e.roomId] ?? {}), [e.agentId]: e.status },
         }));
+        // agent 干完一轮，刷新分支 diffstat
+        if (e.status === "idle") refreshBranches(e.roomId);
       } else if (e.type === "agents_changed") {
         void refreshAgents();
       } else if (e.type === "rooms_changed") {
         void api.rooms().then(setRooms);
+      } else if (e.type === "tasks_changed") {
+        refreshTasks(e.roomId);
       } else if (e.type === "sessions_changed") {
         void api.roomSessions(e.roomId).then((ss) =>
           setSessions((prev) => ({ ...prev, [e.roomId]: ss })),
@@ -99,13 +114,15 @@ export default function App() {
     void api.roomSessions(activeRoomId).then((ss) =>
       setSessions((prev) => ({ ...prev, [activeRoomId]: ss })),
     );
+    refreshTasks(activeRoomId);
+    refreshBranches(activeRoomId);
     // 加入房间时同步流式开关
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({ type: "set_streaming", roomId: activeRoomId, streaming }),
       );
     }
-  }, [activeRoomId, streaming]);
+  }, [activeRoomId, streaming, refreshTasks, refreshBranches]);
 
   const toggleStreaming = useCallback(() => {
     setStreaming((v) => {
@@ -237,6 +254,9 @@ export default function App() {
             onRemoveAgent={removeAgentFromRoom}
             sessions={sessions[room.id] ?? []}
             onResetSession={resetSession}
+            tasks={tasks[room.id] ?? []}
+            branches={branches[room.id] ?? []}
+            gitWorkflow={Boolean(room.gitWorkflow)}
           />
         </>
       ) : (

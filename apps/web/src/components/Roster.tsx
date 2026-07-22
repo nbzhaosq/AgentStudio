@@ -1,5 +1,12 @@
 import { useState } from "react";
-import type { AgentInfo, AgentStatus, SessionInfo } from "@agent-studio/shared";
+import type { AgentInfo, AgentStatus, SessionInfo, Task } from "@agent-studio/shared";
+
+interface BranchInfo {
+  agentId: string;
+  files: number;
+  insertions: number;
+  deletions: number;
+}
 
 interface Props {
   agents: AgentInfo[];
@@ -10,6 +17,9 @@ interface Props {
   onRemoveAgent: (agentId: string) => void;
   sessions: SessionInfo[];
   onResetSession: (agentId?: string) => void;
+  tasks: Task[];
+  branches: BranchInfo[];
+  gitWorkflow: boolean;
 }
 
 function timeAgo(ts: number): string {
@@ -20,7 +30,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(s / 86400)} 天前`;
 }
 
-export default function Roster({ agents, statuses, activities, candidates, onAddAgent, onRemoveAgent, sessions, onResetSession }: Props) {
+export default function Roster({ agents, statuses, activities, candidates, onAddAgent, onRemoveAgent, sessions, onResetSession, tasks, branches, gitWorkflow }: Props) {
   const [picking, setPicking] = useState(false);
 
   return (
@@ -95,6 +105,17 @@ export default function Roster({ agents, statuses, activities, candidates, onAdd
                     ✎ {lastFile}
                   </div>
                 )}
+                {gitWorkflow &&
+                  (() => {
+                    const b = branches.find((x) => x.agentId === a.id);
+                    return b && b.files > 0 ? (
+                      <div className="mt-0.5 font-mono text-[10px]" title={`agent/${a.id} 分支：${b.files} 个文件变更`}>
+                        <span className="text-text-4">⑂</span>{" "}
+                        <span className="text-emerald-500">+{b.insertions}</span>{" "}
+                        <span className="text-red-400">-{b.deletions}</span>
+                      </div>
+                    ) : null;
+                  })()}
                 {a.instructions && (
                   <div className="mt-0.5 max-w-40 text-[10px] leading-snug text-text-3">
                     {a.instructions}
@@ -116,6 +137,46 @@ export default function Roster({ agents, statuses, activities, candidates, onAdd
           );
         })}
       </div>
+
+      {tasks.length > 0 && (
+        <div className="mt-5 border-t border-line pt-3">
+          <h3 className="micro-label mb-2">任务 · {tasks.filter((t) => t.status !== "done").length}/{tasks.length}</h3>
+          <div className="space-y-1.5">
+            {tasks.map((t) => {
+              const assignee = agents.find((a) => a.id === t.assignee);
+              return (
+                <div key={t.id} className="flex items-start gap-1.5 text-[11px]">
+                  <span
+                    className={`mt-0.5 shrink-0 font-mono ${
+                      t.status === "done"
+                        ? "text-emerald-500"
+                        : t.status === "doing"
+                          ? "text-amber-500"
+                          : "text-text-4"
+                    }`}
+                  >
+                    {t.status === "done" ? "☑" : t.status === "doing" ? "◐" : "☐"}
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 leading-snug ${
+                      t.status === "done" ? "text-text-4 line-through" : "text-text-2"
+                    }`}
+                  >
+                    {t.title}
+                  </span>
+                  {assignee && (
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: assignee.color }}
+                      title={assignee.name}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {sessions.length > 0 && (
         <div className="mt-5 border-t border-line pt-3">

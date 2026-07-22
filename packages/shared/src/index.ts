@@ -65,6 +65,20 @@ export interface RoomInfo {
   moderatorId?: string;
   /** 归档（侧栏折叠隐藏，不出现在默认列表） */
   archived?: boolean;
+  /** git 工作流：每个 agent 的工作自动快照到 agent/<id> 分支 */
+  gitWorkflow?: boolean;
+}
+
+/** 任务卡（agent 通过 [task]/[doing]/[done] 标记管理） */
+export interface Task {
+  id: string;
+  roomId: string;
+  title: string;
+  assignee: string | null;
+  status: "todo" | "doing" | "done";
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export type AgentStatus = "idle" | "thinking";
@@ -95,6 +109,7 @@ export type ServerEvent =
   | { type: "agents_changed" }
   | { type: "rooms_changed" }
   | { type: "sessions_changed"; roomId: string }
+  | { type: "tasks_changed"; roomId: string }
   | {
       /** 工作区文件变更活动（瞬态，不持久化）；agentId 为 null 表示多 agent 并发无法精确归属 */
       type: "agent_activity";

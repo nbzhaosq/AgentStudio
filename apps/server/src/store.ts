@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import type { AgentDef, ChatMessage, RoomInfo } from "@agent-studio/shared";
+import type { AgentDef, ChatMessage, RoomInfo, Task } from "@agent-studio/shared";
 
 /**
  * SQLite 持久化：<dataDir>/studio.db，三张表 agents / rooms / messages。
@@ -53,6 +53,17 @@ export class Store {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (room_id, agent_id)
       );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        assignee TEXT,
+        status TEXT NOT NULL DEFAULT 'todo',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_room ON tasks(room_id, status);
     `);
     // 老库迁移：补充 system_prompt 列
     const agentCols = this.db
@@ -88,6 +99,9 @@ export class Store {
     }
     if (!roomCols.includes("archived")) {
       this.db.exec("ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!roomCols.includes("git_workflow")) {
+      this.db.exec("ALTER TABLE rooms ADD COLUMN git_workflow INTEGER NOT NULL DEFAULT 0");
     }
     // 老库迁移：messages 补充 meta 列
     const msgCols = this.db
@@ -198,21 +212,23 @@ export class Store {
       autoDiscuss: r.auto_discuss === 1,
       moderatorId: (r.moderator_id as string | null) ?? undefined,
       archived: r.archived === 1,
+      gitWorkflow: r.git_workflow === 1,
     }));
   }
 
   saveRoom(room: RoomInfo) {
     this.db
       .prepare(
-        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id, archived)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id, archived, git_workflow)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            cwd = excluded.cwd,
            agent_ids = excluded.agent_ids,
            auto_discuss = excluded.auto_discuss,
            moderator_id = excluded.moderator_id,
-           archived = excluded.archived`,
+           archived = excluded.archived,
+           git_workflow = excluded.git_workflow`,
       )
       .run(
         room.id,
@@ -223,6 +239,7 @@ export class Store {
         room.autoDiscuss ? 1 : 0,
         room.moderatorId ?? null,
         room.archived ? 1 : 0,
+        room.gitWorkflow ? 1 : 0,
       );
   }
 
@@ -231,6 +248,61 @@ export class Store {
     this.db.prepare("DELETE FROM rooms WHERE id = ?").run(roomId);
     this.db.prepare("DELETE FROM messages WHERE room_id = ?").run(roomId);
     this.db.prepare("DELETE FROM room_sessions WHERE room_id = ?").run(roomId);
+    this.db.prepare("DELETE FROM tasks WHERE room_id = ?").run(roomId);
+  }
+
+  // ---------- tasks ----------
+
+  listTasks(roomId: string): Task[] {
+    const rows = this.db
+      .prepare("SELECT * FROM tasks WHERE room_id = ? ORDER BY created_at")
+      .all(roomId) as unknown as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: r.id as string,
+      roomId: r.room_id as string,
+      title: r.title as string,
+      assignee: (r.assignee as string | null) ?? null,
+      status: r.status as Task["status"],
+      createdBy: r.created_by as string,
+      createdAt: r.created_at as number,
+      updatedAt: r.updated_at as number,
+    }));
+  }
+
+  createTask(task: Task) {
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, room_id, title, assignee, status, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        task.id,
+        task.roomId,
+        task.title,
+        task.assignee,
+        task.status,
+        task.createdBy,
+        task.createdAt,
+        task.updatedAt,
+      );
+  }
+
+  /** 按 id 前缀或标题子串（忽略大小写）匹配任务，更新状态；返回匹配到的任务 */
+  updateTaskStatusByRef(
+    roomId: string,
+    ref: string,
+    status: Task["status"],
+  ): Task | undefined {
+    const tasks = this.listTasks(roomId).filter((t) => t.status !== status);
+    const refLower = ref.toLowerCase();
+    const hit =
+      tasks.find((t) => t.id.startsWith(ref)) ??
+      tasks.find((t) => t.title.toLowerCase().includes(refLower));
+    if (!hit) return undefined;
+    this.db
+      .prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
+      .run(status, Date.now(), hit.id);
+    return { ...hit, status, updatedAt: Date.now() };
   }
 
   // ---------- messages ----------

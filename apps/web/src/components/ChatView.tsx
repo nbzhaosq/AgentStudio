@@ -17,7 +17,11 @@ interface Props {
   drafts: Record<string, string>;
   streaming: boolean;
   onToggleStreaming: () => void;
-  onUpdateSettings: (patch: { autoDiscuss?: boolean; moderatorId?: string | null }) => void;
+  onUpdateSettings: (patch: {
+    autoDiscuss?: boolean;
+    moderatorId?: string | null;
+    gitWorkflow?: boolean;
+  }) => void;
   onSend: (text: string) => void;
 }
 
@@ -120,6 +124,17 @@ export default function ChatView({ room, agents, messages, statuses, activities,
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
+              room.gitWorkflow
+                ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
+                : "border-line text-text-4 hover:text-text-2"
+            }`}
+            title="git 工作流：开启后目录自动 git init（如需要），每个 agent 的改动快照到 agent/<id> 分支"
+            onClick={() => onUpdateSettings({ gitWorkflow: !room.gitWorkflow })}
+          >
+            ⑂ git
+          </button>
           {room.autoDiscuss && (
             <select
               className="rounded-full border border-line bg-panel px-2 py-1 font-mono text-[10px] text-text-2 outline-none"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage, RoomInfo, ServerEvent } from "@agent-studio/shared";
+import type { ChatMessage, RoomInfo, ServerEvent, Task } from "@agent-studio/shared";
 import { Room, type InvokeFn } from "../src/room.js";
 import type { AgentConfig } from "../src/config.js";
 
@@ -479,6 +479,57 @@ describe("Room 路由", () => {
     await waitSettled(room);
     const reply = room.getMessages().find((m) => m.kind === "agent");
     expect(reply?.meta).toEqual({ costUsd: 0.026, durationMs: 28000 });
+  });
+
+  it("任务标记：[task] 建卡、[done] 更新状态且不出现在聊天里", async () => {
+    const tasks: Task[] = [];
+    const statusCalls: [string, string][] = [];
+    const info: RoomInfo = {
+      id: "rt1",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a", "b"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA, agentB], [], {
+      invoke: async () => "方案定了\n[task] 实现登录页 @b\n[doing] 登录页\n[done] 登录页",
+      emit: () => {},
+      appendMessage: () => {},
+      createTask: (t) => tasks.push(t),
+      updateTaskStatus: (_r, ref, status) => {
+        statusCalls.push([ref, status]);
+        return undefined;
+      },
+    });
+    await room.postUserMessage("@a 规划一下");
+    await waitSettled(room);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ title: "实现登录页 @b", assignee: "b", status: "todo" });
+    expect(statusCalls).toEqual([
+      ["登录页", "doing"],
+      ["登录页", "done"],
+    ]);
+    const reply = room.getMessages().find((m) => m.kind === "agent");
+    expect(reply?.text).toBe("方案定了");
+  });
+
+  it("回复只剩任务标记时不发聊天消息", async () => {
+    const info: RoomInfo = {
+      id: "rt2",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke: async () => "[task] 优化样式",
+      emit: () => {},
+      appendMessage: () => {},
+      createTask: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    expect(room.getMessages().filter((m) => m.kind === "agent")).toHaveLength(0);
   });
 
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {

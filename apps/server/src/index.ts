@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { AgentDef, ClientEvent, RoomInfo, ServerEvent } from "@agent-studio/shared";
 import { configPath, loadAgents, serverRoot } from "./config.js";
 import { invokeAgent } from "./adapter.js";
+import { ensureGitRepo, branchStat } from "./git.js";
 import { Room } from "./room.js";
 import { Store } from "./store.js";
 
@@ -59,6 +60,9 @@ function makeRoomDeps() {
       store.saveSession(roomId, agentId, sessionId),
     deleteSession: (roomId: string, agentId: string) =>
       store.deleteSession(roomId, agentId),
+    createTask: (t: Parameters<Store["createTask"]>[0]) => store.createTask(t),
+    updateTaskStatus: (roomId: string, ref: string, status: "todo" | "doing" | "done") =>
+      store.updateTaskStatusByRef(roomId, ref, status),
   };
 }
 
@@ -182,6 +186,7 @@ const server = createServer(async (req, res) => {
         name?: string;
         cwd?: string;
         agentIds?: string[];
+        gitWorkflow?: boolean;
       };
       if (!body.name?.trim()) return json(res, 400, { error: "缺少 name" });
       if (!body.cwd || !existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
@@ -192,12 +197,17 @@ const server = createServer(async (req, res) => {
       if (agentIds.length === 0) {
         return json(res, 400, { error: "至少选择一个有效 agent" });
       }
+      const cwd = path.resolve(body.cwd);
+      if (body.gitWorkflow && !ensureGitRepo(cwd)) {
+        return json(res, 400, { error: "该目录无法初始化为 git 仓库" });
+      }
       const info: RoomInfo = {
         id: randomUUID(),
         name: body.name.trim(),
-        cwd: path.resolve(body.cwd),
+        cwd,
         agentIds,
         createdAt: Date.now(),
+        gitWorkflow: Boolean(body.gitWorkflow),
       };
       store.saveRoom(info);
       const room = new Room(info, [], [], makeRoomDeps());
@@ -222,6 +232,7 @@ const server = createServer(async (req, res) => {
         autoDiscuss?: boolean;
         moderatorId?: string | null;
         archived?: boolean;
+        gitWorkflow?: boolean;
       };
       const all = store.listAgents();
       // 成员变更（可选）
@@ -266,6 +277,13 @@ const server = createServer(async (req, res) => {
       if (body.archived !== undefined) {
         room.info.archived = body.archived;
       }
+      // git 工作流（可选；开启时确保目录是 git 仓库）
+      if (body.gitWorkflow !== undefined) {
+        if (body.gitWorkflow && !ensureGitRepo(room.info.cwd)) {
+          return json(res, 400, { error: "该目录无法初始化为 git 仓库" });
+        }
+        room.info.gitWorkflow = body.gitWorkflow;
+      }
       store.saveRoom(room.info);
       broadcast({ type: "rooms_changed" });
       return json(res, 200, room.info);
@@ -299,6 +317,22 @@ const server = createServer(async (req, res) => {
       const room = rooms.get(msgMatch[1]);
       if (!room) return json(res, 404, { error: "房间不存在" });
       return json(res, 200, room.getMessages());
+    }
+    const tasksMatch = p.match(/^\/api\/rooms\/([^/]+)\/tasks$/);
+    if (tasksMatch && req.method === "GET") {
+      const room = rooms.get(tasksMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      return json(res, 200, store.listTasks(room.info.id));
+    }
+    const branchesMatch = p.match(/^\/api\/rooms\/([^/]+)\/branches$/);
+    if (branchesMatch && req.method === "GET") {
+      const room = rooms.get(branchesMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      if (!room.info.gitWorkflow) return json(res, 200, []);
+      const stats = room.info.agentIds
+        .map((id) => branchStat(room.info.cwd, id))
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+      return json(res, 200, stats);
     }
     if (p.startsWith("/api/")) {
       return json(res, 404, { error: "not found" });

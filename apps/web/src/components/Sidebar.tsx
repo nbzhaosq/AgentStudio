@@ -30,6 +30,7 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManag
   const [name, setName] = useState("");
   const [cwd, setCwd] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [gitWorkflow, setGitWorkflow] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -41,7 +42,7 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManag
     setError("");
     try {
       const { api } = await import("../api");
-      const room = await api.createRoom({ name, cwd, agentIds: selected });
+      const room = await api.createRoom({ name, cwd, agentIds: selected, gitWorkflow });
       onCreated(room);
       setShowForm(false);
       setName("");
@@ -121,6 +122,14 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManag
             ))}
           </div>
           {error && <p className="text-[11px] text-red-400">{error}</p>}
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-3">
+            <input
+              type="checkbox"
+              checked={gitWorkflow}
+              onChange={(e) => setGitWorkflow(e.target.checked)}
+            />
+            ⑂ git 工作流（每个 agent 的改动快照到独立分支）
+          </label>
           <button
             className="w-full rounded-lg bg-signal/85 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-signal disabled:opacity-40"
             disabled={busy || !name.trim() || !cwd.trim() || selected.length === 0}

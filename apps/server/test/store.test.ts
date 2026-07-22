@@ -55,6 +55,7 @@ describe("Store (SQLite)", () => {
       autoDiscuss: false,
       moderatorId: undefined,
       archived: false,
+      gitWorkflow: false,
     };
     store.saveRoom(room);
     expect(store.loadRooms()).toEqual([room]);
@@ -118,6 +119,7 @@ describe("Store (SQLite)", () => {
       autoDiscuss: false,
       moderatorId: undefined,
       archived: false,
+      gitWorkflow: false,
     };
     writeFileSync(path.join(dir, "rooms.json"), JSON.stringify([room]));
     const msg: ChatMessage = {

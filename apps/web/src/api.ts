@@ -4,6 +4,7 @@ import type {
   RoomInfo,
   ServerEvent,
   SessionInfo,
+  Task,
 } from "@agent-studio/shared";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -26,7 +27,7 @@ export const api = {
   deleteAgent: (id: string) =>
     req<{ ok: boolean }>(`/api/agents/${id}`, { method: "DELETE" }),
   rooms: () => req<RoomInfo[]>("/api/rooms"),
-  createRoom: (input: { name: string; cwd: string; agentIds: string[] }) =>
+  createRoom: (input: { name: string; cwd: string; agentIds: string[]; gitWorkflow?: boolean }) =>
     req<RoomInfo>("/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,7 +41,12 @@ export const api = {
     }),
   updateRoomSettings: (
     roomId: string,
-    patch: { autoDiscuss?: boolean; moderatorId?: string | null; archived?: boolean },
+    patch: {
+      autoDiscuss?: boolean;
+      moderatorId?: string | null;
+      archived?: boolean;
+      gitWorkflow?: boolean;
+    },
   ) =>
     req<RoomInfo>(`/api/rooms/${roomId}`, {
       method: "PATCH",
@@ -49,6 +55,11 @@ export const api = {
     }),
   deleteRoom: (roomId: string) =>
     req<{ ok: boolean }>(`/api/rooms/${roomId}`, { method: "DELETE" }),
+  tasks: (roomId: string) => req<Task[]>(`/api/rooms/${roomId}/tasks`),
+  branches: (roomId: string) =>
+    req<{ agentId: string; files: number; insertions: number; deletions: number }[]>(
+      `/api/rooms/${roomId}/branches`,
+    ),
   roomSessions: (roomId: string) =>
     req<SessionInfo[]>(`/api/rooms/${roomId}/sessions`),
   deleteRoomSession: (roomId: string, agentId?: string) =>

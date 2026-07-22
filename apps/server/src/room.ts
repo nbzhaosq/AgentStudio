@@ -7,8 +7,10 @@ import {
   type ChatMessage,
   type RoomInfo,
   type ServerEvent,
+  type Task,
 } from "@agent-studio/shared";
 import type { AgentConfig } from "./config.js";
+import { snapshotAgentBranch } from "./git.js";
 
 export type InvokeReply =
   | string
@@ -33,6 +35,9 @@ export interface RoomDeps {
   /** 会话续聊持久化（可选，缺省不存） */
   saveSession?: (roomId: string, agentId: string, sessionId: string) => void;
   deleteSession?: (roomId: string, agentId: string) => void;
+  /** 任务卡持久化（可选，缺省不存） */
+  createTask?: (task: Task) => void;
+  updateTaskStatus?: (roomId: string, ref: string, status: Task["status"]) => Task | undefined;
   /** 一条用户消息引发的 @ 接力上限，默认 12 */
   maxHops?: number;
   /** prompt 中携带的最近消息条数，默认 30 */
@@ -97,6 +102,8 @@ export class Room {
       appendMessage: deps.appendMessage,
       saveSession: deps.saveSession ?? (() => {}),
       deleteSession: deps.deleteSession ?? (() => {}),
+      createTask: deps.createTask ?? (() => {}),
+      updateTaskStatus: deps.updateTaskStatus ?? (() => undefined),
       maxHops: deps.maxHops ?? 12,
       transcriptWindow: deps.transcriptWindow ?? 30,
       activityFlushMs: deps.activityFlushMs ?? 800,
@@ -240,9 +247,6 @@ export class Room {
     text: string,
     meta?: ChatMessage["meta"],
   ): ChatMessage {
-    if (kind === "agent") {
-      text = this.applyStrip(author, text);
-    }
     const msg: ChatMessage = {
       id: randomUUID(),
       roomId: this.info.id,
@@ -258,6 +262,49 @@ export class Room {
     this.deps.appendMessage(msg);
     this.deps.emit({ type: "message", message: msg });
     return msg;
+  }
+
+  /**
+   * 处理 agent 回复：解析任务标记（[task]/[doing]/[done]，剥离出聊天流），
+   * 再应用 stripPatterns 过滤。返回最终可展示文本（可能为空串）。
+   */
+  private processAgentReply(agent: AgentConfig, text: string): string {
+    let tasksChanged = false;
+    const kept: string[] = [];
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*\[(task|doing|done)\]\s+(.+?)\s*$/i);
+      if (!m) {
+        kept.push(line);
+        continue;
+      }
+      const action = m[1].toLowerCase();
+      const body = m[2];
+      if (action === "task") {
+        const assignee = parseMentions(body, this.agents)[0] ?? null;
+        this.deps.createTask({
+          id: randomUUID().slice(0, 8),
+          roomId: this.info.id,
+          title: body,
+          assignee,
+          status: "todo",
+          createdBy: agent.id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        tasksChanged = true;
+      } else {
+        const updated = this.deps.updateTaskStatus(
+          this.info.id,
+          body,
+          action as Task["status"],
+        );
+        if (updated) tasksChanged = true;
+      }
+    }
+    if (tasksChanged) {
+      this.deps.emit({ type: "tasks_changed", roomId: this.info.id });
+    }
+    return this.applyStrip(agent.id, kept.join("\n"));
   }
 
   /** 应用 agent 的输出过滤规则（stripPatterns，gm 正则逐个抹除） */
@@ -359,7 +406,8 @@ export class Room {
 规则：
 1. 若讨论已有明确结论，或继续下去没有增量价值：只回复 [end]。
 2. 若值得继续：用一两句话小结进展与分歧，提出下一个最具体的问题，并 @ 应该回答的 agent（不要 @ 自己，不要 @all）。
-3. 回复就是发到聊天室里的内容，不要加前缀或解释。
+3. 若结论可以落成行动，用 [task] 任务标题 @负责人 拆成任务卡分派下去。
+4. 回复就是发到聊天室里的内容，不要加前缀或解释。
 
 === 最近讨论记录（最新在后） ===
 ${transcript}
@@ -390,7 +438,9 @@ ${transcript}
         this.postSystem(`🏁 主持人 ${mod.name} 结束了本话题`);
         return;
       }
-      const msg = this.record(mod.id, "agent", reply);
+      const clean = this.processAgentReply(mod, reply);
+      if (!clean.trim()) return;
+      const msg = this.record(mod.id, "agent", clean);
       for (const targetId of this.resolveTargets(msg)) {
         this.enqueue(targetId, { trigger: msg, chainId: `auto-${msg.id}`, hop: 0 });
       }
@@ -446,7 +496,17 @@ ${transcript}
     const reply = result.text;
     if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
 
-    const msg = this.record(agent.id, "agent", reply, result.meta);
+    const clean = this.processAgentReply(agent, reply);
+    if (!clean.trim()) return;
+    const msg = this.record(agent.id, "agent", clean, result.meta);
+    // git 工作流：把本轮改动快照到该 agent 的分支
+    if (this.info.gitWorkflow) {
+      snapshotAgentBranch(
+        this.info.cwd,
+        agentId,
+        `agent(${agentId}): ${turn.trigger.text.slice(0, 60)}`,
+      );
+    }
     const hop = turn.hop + 1;
     const targets = this.resolveTargets(msg);
     if (targets.length === 0) return;
@@ -589,6 +649,7 @@ ${roster || "（暂无其他 agent）"}
 5. 简洁：寒暄一两句话带过；没有被明确要求时，不要长篇自我介绍。
 6. 用中文回复（除非用户用其他语言）。
 7. 聊天室只承载讨论与决策：不要在回复里粘贴大段代码或文件内容。动手干活后用几句话汇报你做了什么、改动了哪些文件、关键决策和理由即可，细节让其他人自己去看文件。
+8. 任务管理：需要拆解或分派工作时，用单独一行 \`[task] 任务标题 @负责人\` 创建任务卡；开始或完成某项工作时，分别用 \`[doing] 任务关键词\` / \`[done] 任务关键词\` 更新状态。这些行不会出现在聊天室里，只用于任务看板。${this.info.gitWorkflow ? "\n9. 本房间开启了 git 工作流：你的改动会被自动快照到 agent/" + agent.id + " 分支，无需自己 commit；是否合并到 main 由用户或主持人决定。" : ""}
 ${busySection}
 === 对话记录（最新在后） ===
 ${transcript || "（暂无记录）"}
