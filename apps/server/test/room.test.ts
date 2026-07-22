@@ -408,21 +408,52 @@ describe("Room 路由", () => {
     expect(calls).toEqual(["a"]);
   });
 
-  it("主持人发言无人接话 → 讨论自然结束", async () => {
-    const events: ServerEvent[] = [];
+  it("主持人连续两次发言无人接话才自然结束", async () => {
+    const calls: string[] = [];
     const info: RoomInfo = {
       id: "ra2", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
     };
     const room = new Room(info, [agentA, agentB], [], {
-      invoke: async (agent) => (agent.id === "b" ? "大家先这样吧" : "好的"),
-      emit: (e) => events.push(e),
+      invoke: async (agent) => {
+        calls.push(agent.id);
+        return agent.id === "b" ? "大家先这样吧" : "好的";
+      },
+      emit: () => {},
       appendMessage: () => {},
     });
     room.setAutoDiscuss(true, "b");
     await room.postUserMessage("@a 干个活");
     await waitSettled(room);
+    // a → b(第一次无人接) → b 被再次唤起(第二次无人接) → 自然结束
+    expect(calls).toEqual(["a", "b", "b"]);
     const texts = room.getMessages().map((m) => m.text);
     expect(texts.some((t) => t.includes("讨论自然结束"))).toBe(true);
+  });
+
+  it("成员调用失败导致的安静会交给主持人收拾", async () => {
+    const calls: string[] = [];
+    const info: RoomInfo = {
+      id: "ra4", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
+    };
+    const room = new Room(info, [agentA, agentB], [], {
+      invoke: async (agent) => {
+        calls.push(agent.id);
+        if (agent.id === "a") throw new Error("模型挂了");
+        return "• [end]"; // 带 bullet 前缀也要识别
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    room.setAutoDiscuss(true, "b");
+    await room.postUserMessage("@a 干活");
+    await waitSettled(room);
+    // a 失败 → ⚠️ 系统消息 → 主持人 b 被唤起 → [end]
+    expect(calls).toEqual(["a", "b"]);
+    const sysTexts = room.getMessages().filter((m) => m.kind === "system").map((m) => m.text);
+    expect(sysTexts.some((t) => t.includes("调用失败"))).toBe(true);
+    expect(sysTexts.some((t) => t.includes("结束了本话题"))).toBe(true);
+    // [end] 不应作为普通消息发出
+    expect(room.getMessages().filter((m) => m.kind === "agent")).toHaveLength(0);
   });
 
   it("自驱讨论达到轮次上限后自动停止", async () => {

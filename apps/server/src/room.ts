@@ -77,6 +77,8 @@ export class Room {
   private streaming = true;
   /** 自驱讨论：当前话题主持人已续轮数（用户发言时重置） */
   private autoRounds = 0;
+  /** 主持人连续发言无人接话的次数（他人或用户发言时重置；>=2 自然终止） */
+  private modStreak = 0;
   private watcher?: FSWatcher;
   /** agentId → 最近改动文件（最新在后，上限 10） */
   private recentFiles = new Map<string, string[]>();
@@ -261,7 +263,13 @@ export class Room {
       images: images && images.length > 0 ? images : undefined,
     };
     this.messages.push(msg);
-    if (kind === "agent") this.lastTurnAt.set(author, msg.ts);
+    if (kind === "agent") {
+      this.lastTurnAt.set(author, msg.ts);
+      // 主持人连续独白的计数：他人（或用户）发言即清零
+      if (author === this.info.moderatorId) this.modStreak++;
+      else this.modStreak = 0;
+    }
+    if (kind === "user") this.modStreak = 0;
     this.deps.appendMessage(msg);
     this.deps.emit({ type: "message", message: msg });
     return msg;
@@ -275,7 +283,7 @@ export class Room {
     let tasksChanged = false;
     const kept: string[] = [];
     for (const line of text.split("\n")) {
-      const m = line.match(/^\s*\[(task|doing|done)\]\s+(.+?)\s*$/i);
+      const m = line.match(/^[\s•\-*]*\[(task|doing|done)\]\s+(.+?)\s*$/i);
       if (!m) {
         kept.push(line);
         continue;
@@ -366,9 +374,12 @@ export class Room {
     const mod = this.agents.find((a) => a.id === this.info.moderatorId);
     if (!mod) return;
     const last = this.messages.at(-1);
-    if (!last || last.kind !== "agent") return;
-    if (last.author === mod.id) {
-      // 主持人说完无人接话 → 话题自然终止
+    if (!last) return;
+    // 调用失败（⚠️）导致的安静也要交给主持人收拾：追问、重新分派或结束
+    const failedLast = last.kind === "system" && last.text.startsWith("⚠️");
+    if (last.kind !== "agent" && !failedLast) return;
+    // 主持人连续两次发言无人接话，才认定话题自然终止
+    if (last.kind === "agent" && last.author === mod.id && this.modStreak >= 2) {
       this.postSystem("🏁 讨论自然结束");
       return;
     }
@@ -380,10 +391,12 @@ export class Room {
       return;
     }
     this.autoRounds++;
-    void this.runModeratorTurn(mod);
+    const stalled =
+      failedLast || (last.kind === "agent" && last.author === mod.id);
+    void this.runModeratorTurn(mod, stalled);
   }
 
-  private async runModeratorTurn(mod: AgentConfig) {
+  private async runModeratorTurn(mod: AgentConfig, stalled = false) {
     this.running.add(mod.id);
     this.setStatus(mod.id, "thinking");
     const sessionId = this.sessions.get(mod.id);
@@ -403,7 +416,7 @@ export class Room {
 2. 若值得继续：用一两句话小结进展与分歧，提出下一个最具体的问题，并 @ 应该回答的 agent（不要 @ 自己，不要 @all）。
 3. 若结论可以落成行动，用 [task] 任务标题 @负责人 拆成任务卡分派下去。
 4. 回复就是发到聊天室里的内容，不要加前缀或解释。
-
+${stalled ? `\n注意：上一条发言后无人接话（对方可能调用失败，或任务已完成）。若任务确已完成或无法推进，回复 [end]；否则换个方式再推动——@ 具体的人追问进度、重新分派给其他人，或简化任务。` : ""}
 === 最近讨论记录（最新在后） ===
 ${transcript}
 
@@ -429,7 +442,7 @@ ${transcript}
       }
 
       const reply = result.text.trim();
-      if (!reply || /^\[end\]/i.test(reply) || /^\[skip\]/i.test(reply)) {
+      if (!reply || /^[\s•\-*]*\[end\]/i.test(reply) || /^[\s•\-*]*\[skip\]/i.test(reply)) {
         this.postSystem(`🏁 主持人 ${mod.name} 结束了本话题`);
         return;
       }
@@ -489,7 +502,7 @@ ${transcript}
       this.deps.emit({ type: "sessions_changed", roomId: this.info.id });
     }
     const reply = result.text;
-    if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
+    if (!reply.trim() || /^[\s•\-*]*\[skip\]/i.test(reply.trim())) return;
 
     const clean = this.processAgentReply(agent, reply);
     if (!clean.trim()) return;
