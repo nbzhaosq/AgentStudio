@@ -57,6 +57,7 @@ export function invokeAgent(
   cwd: string,
   sessionId?: string,
   onChunk?: (draft: string) => void,
+  timeoutMs: number = TIMEOUT_MS,
 ): Promise<InvokeResult> {
   let template = agent.args;
   let pinnedId: string | undefined;
@@ -119,8 +120,8 @@ export function invokeAgent(
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       cleanup();
-      reject(new Error(`${agent.id} 调用超时（${TIMEOUT_MS / 1000}s）`));
-    }, TIMEOUT_MS);
+      reject(new Error(`${agent.id} 调用超时（${timeoutMs / 1000}s）`));
+    }, timeoutMs);
 
     function cleanup() {
       clearTimeout(timer);

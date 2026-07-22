@@ -67,6 +67,12 @@ export interface RoomInfo {
   archived?: boolean;
   /** git 工作流：每个 agent 的工作自动快照到 agent/<id> 分支 */
   gitWorkflow?: boolean;
+  /** 房间级覆盖：@ 接力防环跳数（默认 12） */
+  maxHops?: number;
+  /** 房间级覆盖：自驱讨论每话题主持人续轮上限（默认 20） */
+  maxAutoRounds?: number;
+  /** 房间级覆盖：单次 agent 调用超时 ms（默认 600000） */
+  timeoutMs?: number;
 }
 
 /** 任务卡（agent 通过 [task]/[doing]/[done] 标记管理） */

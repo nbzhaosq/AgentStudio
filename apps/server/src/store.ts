@@ -103,6 +103,11 @@ export class Store {
     if (!roomCols.includes("git_workflow")) {
       this.db.exec("ALTER TABLE rooms ADD COLUMN git_workflow INTEGER NOT NULL DEFAULT 0");
     }
+    if (!roomCols.includes("max_hops")) {
+      this.db.exec("ALTER TABLE rooms ADD COLUMN max_hops INTEGER");
+      this.db.exec("ALTER TABLE rooms ADD COLUMN max_auto_rounds INTEGER");
+      this.db.exec("ALTER TABLE rooms ADD COLUMN timeout_ms INTEGER");
+    }
     // 老库迁移：messages 补充 meta 列
     const msgCols = this.db
       .prepare("PRAGMA table_info(messages)")
@@ -213,14 +218,17 @@ export class Store {
       moderatorId: (r.moderator_id as string | null) ?? undefined,
       archived: r.archived === 1,
       gitWorkflow: r.git_workflow === 1,
+      maxHops: (r.max_hops as number | null) ?? undefined,
+      maxAutoRounds: (r.max_auto_rounds as number | null) ?? undefined,
+      timeoutMs: (r.timeout_ms as number | null) ?? undefined,
     }));
   }
 
   saveRoom(room: RoomInfo) {
     this.db
       .prepare(
-        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id, archived, git_workflow)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id, archived, git_workflow, max_hops, max_auto_rounds, timeout_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            cwd = excluded.cwd,
@@ -228,7 +236,10 @@ export class Store {
            auto_discuss = excluded.auto_discuss,
            moderator_id = excluded.moderator_id,
            archived = excluded.archived,
-           git_workflow = excluded.git_workflow`,
+           git_workflow = excluded.git_workflow,
+           max_hops = excluded.max_hops,
+           max_auto_rounds = excluded.max_auto_rounds,
+           timeout_ms = excluded.timeout_ms`,
       )
       .run(
         room.id,
@@ -240,6 +251,9 @@ export class Store {
         room.moderatorId ?? null,
         room.archived ? 1 : 0,
         room.gitWorkflow ? 1 : 0,
+        room.maxHops ?? null,
+        room.maxAutoRounds ?? null,
+        room.timeoutMs ?? null,
       );
   }
 

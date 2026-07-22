@@ -532,6 +532,34 @@ describe("Room 路由", () => {
     expect(room.getMessages().filter((m) => m.kind === "agent")).toHaveLength(0);
   });
 
+  it("房间级覆盖：maxHops/maxAutoRounds 优先于默认", async () => {
+    // maxHops = 1：接力一轮即停
+    const { room, calls } = makeRoom({ a: "@b ping", b: "@a pong" });
+    room.info.maxHops = 1;
+    await room.postUserMessage("@a 开始");
+    await waitSettled(room);
+    expect(calls.length).toBeLessThanOrEqual(2);
+    expect(
+      room.getMessages().find((m) => m.kind === "system")?.text,
+    ).toContain("1 跳上限");
+
+    // maxAutoRounds = 1：自驱一轮即上限
+    const info: RoomInfo = {
+      id: "rl2", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
+      maxAutoRounds: 1,
+    };
+    const room2 = new Room(info, [agentA, agentB], [], {
+      invoke: async (agent) => (agent.id === "b" ? "@a 继续" : "好的"),
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    room2.setAutoDiscuss(true, "b");
+    await room2.postUserMessage("@a 开始");
+    await waitSettled(room2);
+    const sysTexts = room2.getMessages().filter((m) => m.kind === "system").map((m) => m.text);
+    expect(sysTexts.some((t) => t.includes("1 轮上限"))).toBe(true);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

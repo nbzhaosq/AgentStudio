@@ -233,6 +233,9 @@ const server = createServer(async (req, res) => {
         moderatorId?: string | null;
         archived?: boolean;
         gitWorkflow?: boolean;
+        maxHops?: number | null;
+        maxAutoRounds?: number | null;
+        timeoutMs?: number | null;
       };
       const all = store.listAgents();
       // 成员变更（可选）
@@ -283,6 +286,16 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { error: "该目录无法初始化为 git 仓库" });
         }
         room.info.gitWorkflow = body.gitWorkflow;
+      }
+      // 数值上限（可选；null 恢复默认）
+      for (const key of ["maxHops", "maxAutoRounds", "timeoutMs"] as const) {
+        const v = body[key];
+        if (v !== undefined) {
+          if (v !== null && (!Number.isInteger(v) || v <= 0)) {
+            return json(res, 400, { error: `${key} 必须是正整数或 null` });
+          }
+          room.info[key] = v ?? undefined;
+        }
       }
       store.saveRoom(room.info);
       broadcast({ type: "rooms_changed" });

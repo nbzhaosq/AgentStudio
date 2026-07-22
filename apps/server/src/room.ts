@@ -26,6 +26,7 @@ export type InvokeFn = (
   cwd: string,
   sessionId?: string,
   onChunk?: (draft: string) => void,
+  timeoutMs?: number,
 ) => Promise<InvokeReply>;
 
 export interface RoomDeps {
@@ -369,10 +370,10 @@ export class Room {
       this.postSystem("🏁 讨论自然结束");
       return;
     }
-    if (this.autoRounds >= this.deps.maxAutoRounds) {
+    if (this.autoRounds >= (this.info.maxAutoRounds ?? this.deps.maxAutoRounds)) {
       this.autoRounds++; // 上限提示只发一次
       this.postSystem(
-        `🛑 自驱讨论已达 ${this.deps.maxAutoRounds} 轮上限，自动结束。用户发言可开启新话题。`,
+        `🛑 自驱讨论已达 ${this.info.maxAutoRounds ?? this.deps.maxAutoRounds} 轮上限，自动结束。用户发言可开启新话题。`,
       );
       return;
     }
@@ -510,11 +511,11 @@ ${transcript}
     const hop = turn.hop + 1;
     const targets = this.resolveTargets(msg);
     if (targets.length === 0) return;
-    if (hop > this.deps.maxHops) {
+    if (hop > (this.info.maxHops ?? this.deps.maxHops)) {
       this.record(
         "system",
         "system",
-        `🛑 触发链超过 ${this.deps.maxHops} 跳上限，已自动停止。`,
+        `🛑 触发链超过 ${this.info.maxHops ?? this.deps.maxHops} 跳上限，已自动停止。`,
       );
       return;
     }
@@ -543,7 +544,14 @@ ${transcript}
           })
       : undefined;
     try {
-      const res = await this.deps.invoke(agent, prompt, this.info.cwd, sessionId, onChunk);
+      const res = await this.deps.invoke(
+        agent,
+        prompt,
+        this.info.cwd,
+        sessionId,
+        onChunk,
+        this.info.timeoutMs,
+      );
       return typeof res === "string" ? { text: res } : res;
     } finally {
       if (onChunk) {

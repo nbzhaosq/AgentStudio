@@ -184,7 +184,15 @@ export default function App() {
   );
 
   const updateRoomSettings = useCallback(
-    (patch: { autoDiscuss?: boolean; moderatorId?: string | null; archived?: boolean }) => {
+    (patch: {
+      autoDiscuss?: boolean;
+      moderatorId?: string | null;
+      archived?: boolean;
+      gitWorkflow?: boolean;
+      maxHops?: number | null;
+      maxAutoRounds?: number | null;
+      timeoutMs?: number | null;
+    }) => {
       if (!room) return;
       void api.updateRoomSettings(room.id, patch).then((updated) =>
         setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),

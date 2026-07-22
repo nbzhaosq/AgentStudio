@@ -46,6 +46,9 @@ export const api = {
       moderatorId?: string | null;
       archived?: boolean;
       gitWorkflow?: boolean;
+      maxHops?: number | null;
+      maxAutoRounds?: number | null;
+      timeoutMs?: number | null;
     },
   ) =>
     req<RoomInfo>(`/api/rooms/${roomId}`, {

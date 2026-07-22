@@ -21,6 +21,9 @@ interface Props {
     autoDiscuss?: boolean;
     moderatorId?: string | null;
     gitWorkflow?: boolean;
+    maxHops?: number | null;
+    maxAutoRounds?: number | null;
+    timeoutMs?: number | null;
   }) => void;
   onSend: (text: string) => void;
 }
@@ -101,16 +104,36 @@ function metaLine(m: ChatMessage): string | null {
 
 export default function ChatView({ room, agents, messages, statuses, activities, drafts, streaming, onToggleStreaming, onUpdateSettings, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [showLimits, setShowLimits] = useState(false);
+  const [hopInput, setHopInput] = useState("");
+  const [roundsInput, setRoundsInput] = useState("");
+  const [timeoutInput, setTimeoutInput] = useState("");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, statuses, drafts]);
 
+  function openLimits() {
+    setHopInput(room.maxHops?.toString() ?? "");
+    setRoundsInput(room.maxAutoRounds?.toString() ?? "");
+    setTimeoutInput(room.timeoutMs ? String(room.timeoutMs / 1000) : "");
+    setShowLimits((v) => !v);
+  }
+
+  function saveLimits() {
+    onUpdateSettings({
+      maxHops: hopInput.trim() ? Number(hopInput) : null,
+      maxAutoRounds: roundsInput.trim() ? Number(roundsInput) : null,
+      timeoutMs: timeoutInput.trim() ? Number(timeoutInput) * 1000 : null,
+    });
+    setShowLimits(false);
+  }
+
   const thinking = agents.filter((a) => statuses[a.id] === "thinking");
   const drafting = agents.filter((a) => drafts[a.id]);
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="relative flex min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-line px-6 py-3.5">
         <div>
           <div className="font-display text-sm font-semibold tracking-wide text-text-1">
@@ -124,6 +147,17 @@ export default function ChatView({ room, agents, messages, statuses, activities,
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
+              streaming
+                ? "border-signal/40 bg-signal/10 text-signal"
+                : "border-line text-text-4 hover:text-text-2"
+            }`}
+            title="流式输出：agent 回复逐字显示；关闭则等完整回复"
+            onClick={onToggleStreaming}
+          >
+            {streaming ? "⚡ 流式" : "▤ 整段"}
+          </button>
           <button
             className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
               room.gitWorkflow
@@ -174,17 +208,64 @@ export default function ChatView({ room, agents, messages, statuses, activities,
           </button>
           <button
             className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
-              streaming
-                ? "border-signal/40 bg-signal/10 text-signal"
+              room.maxHops || room.maxAutoRounds || room.timeoutMs
+                ? "border-line2 text-text-2"
                 : "border-line text-text-4 hover:text-text-2"
             }`}
-            title="流式输出：agent 回复逐字显示；关闭则等完整回复"
-            onClick={onToggleStreaming}
+            title="房间上限设置：@ 接力跳数 / 自驱轮次 / 单次调用超时"
+            onClick={openLimits}
           >
-            {streaming ? "⚡ 流式" : "▤ 整段"}
+            ⚙
           </button>
         </div>
       </header>
+
+      {showLimits && (
+        <div className="absolute right-4 top-14 z-40 w-64 rounded-xl border border-line2 bg-panel2 p-3 shadow-xl shadow-black/30">
+          <div className="micro-label mb-2">房间上限</div>
+          <label className="mb-2 block text-[11px] text-text-3">
+            @ 接力跳数（默认 12）
+            <input
+              className="field mt-0.5"
+              type="number" min={1} placeholder="12"
+              value={hopInput}
+              onChange={(e) => setHopInput(e.target.value)}
+            />
+          </label>
+          <label className="mb-2 block text-[11px] text-text-3">
+            自驱续轮上限（默认 20）
+            <input
+              className="field mt-0.5"
+              type="number" min={1} placeholder="20"
+              value={roundsInput}
+              onChange={(e) => setRoundsInput(e.target.value)}
+            />
+          </label>
+          <label className="mb-3 block text-[11px] text-text-3">
+            单次调用超时（秒，默认 600）
+            <input
+              className="field mt-0.5"
+              type="number" min={10} placeholder="600"
+              value={timeoutInput}
+              onChange={(e) => setTimeoutInput(e.target.value)}
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              className="rounded-lg border border-line bg-hover px-3 py-1 text-xs text-text-2"
+              onClick={() => setShowLimits(false)}
+            >
+              取消
+            </button>
+            <button
+              className="rounded-lg bg-signal/85 px-3 py-1 text-xs font-medium text-accent-fg hover:bg-signal"
+              onClick={saveLimits}
+            >
+              保存
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
         {messages.length === 0 && (
