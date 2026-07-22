@@ -205,32 +205,51 @@ const server = createServer(async (req, res) => {
     if (roomMatch && req.method === "PATCH") {
       const room = rooms.get(roomMatch[1]);
       if (!room) return json(res, 404, { error: "房间不存在" });
-      const body = JSON.parse(await readBody(req)) as { agentIds?: string[] };
-      if (!Array.isArray(body.agentIds) || body.agentIds.length === 0) {
-        return json(res, 400, { error: "agentIds 必须是非空数组" });
-      }
-      const all = store.listAgents();
-      const validIds = body.agentIds.filter((id) => all.some((a) => a.id === id));
-      if (validIds.length === 0) {
-        return json(res, 400, { error: "agentIds 中没有有效 agent" });
-      }
-      const before = new Set(room.info.agentIds);
-      const added = validIds.filter((id) => !before.has(id));
-      const removed = [...before].filter((id) => !validIds.includes(id));
-      room.setAgentIds(validIds, all);
-      store.saveRoom(room.info);
-      const nameOf = (id: string) => {
-        const a = all.find((x) => x.id === id);
-        return a ? `${a.name} (@${a.id})` : `@${id}`;
+      const body = JSON.parse(await readBody(req)) as {
+        agentIds?: string[];
+        autoDiscuss?: boolean;
+        moderatorId?: string | null;
       };
-      if (added.length > 0) {
-        room.postSystem(`📥 ${added.map(nameOf).join("、")} 加入了房间`);
+      const all = store.listAgents();
+      // 成员变更（可选）
+      if (body.agentIds !== undefined) {
+        if (!Array.isArray(body.agentIds) || body.agentIds.length === 0) {
+          return json(res, 400, { error: "agentIds 必须是非空数组" });
+        }
+        const validIds = body.agentIds.filter((id) => all.some((a) => a.id === id));
+        if (validIds.length === 0) {
+          return json(res, 400, { error: "agentIds 中没有有效 agent" });
+        }
+        const before = new Set(room.info.agentIds);
+        const added = validIds.filter((id) => !before.has(id));
+        const removed = [...before].filter((id) => !validIds.includes(id));
+        room.setAgentIds(validIds, all);
+        const nameOf = (id: string) => {
+          const a = all.find((x) => x.id === id);
+          return a ? `${a.name} (@${a.id})` : `@${id}`;
+        };
+        if (added.length > 0) {
+          room.postSystem(`📥 ${added.map(nameOf).join("、")} 加入了房间`);
+        }
+        if (removed.length > 0) {
+          for (const id of removed) room.clearSession(id); // 清掉被移除者的会话
+          room.postSystem(`📤 ${removed.map(nameOf).join("、")} 离开了房间`);
+          broadcast({ type: "sessions_changed", roomId: room.info.id });
+        }
       }
-      if (removed.length > 0) {
-        for (const id of removed) room.clearSession(id); // 清掉被移除者的会话
-        room.postSystem(`📤 ${removed.map(nameOf).join("、")} 离开了房间`);
-        broadcast({ type: "sessions_changed", roomId: room.info.id });
+      // 自驱讨论设置（可选）
+      if (body.autoDiscuss !== undefined || body.moderatorId !== undefined) {
+        const auto = body.autoDiscuss ?? room.info.autoDiscuss ?? false;
+        const mod =
+          body.moderatorId !== undefined
+            ? (body.moderatorId ?? undefined)
+            : room.info.moderatorId;
+        if (auto && (!mod || !room.info.agentIds.includes(mod))) {
+          return json(res, 400, { error: "开启自驱讨论需要指定房间内的主持人 agent" });
+        }
+        room.setAutoDiscuss(auto, mod);
       }
+      store.saveRoom(room.info);
       broadcast({ type: "rooms_changed" });
       return json(res, 200, room.info);
     }

@@ -73,6 +73,15 @@ export class Store {
       this.db.exec("ALTER TABLE agents ADD COLUMN stream_args_extra TEXT");
       this.db.exec("ALTER TABLE agents ADD COLUMN stream_format TEXT");
     }
+    // 老库迁移：rooms 补充自驱讨论列
+    const roomCols = this.db
+      .prepare("PRAGMA table_info(rooms)")
+      .all()
+      .map((r) => (r as { name: string }).name);
+    if (!roomCols.includes("auto_discuss")) {
+      this.db.exec("ALTER TABLE rooms ADD COLUMN auto_discuss INTEGER NOT NULL DEFAULT 0");
+      this.db.exec("ALTER TABLE rooms ADD COLUMN moderator_id TEXT");
+    }
     this.migrateLegacyJsonl();
   }
 
@@ -166,20 +175,32 @@ export class Store {
       cwd: r.cwd as string,
       agentIds: JSON.parse(r.agent_ids as string) as string[],
       createdAt: r.created_at as number,
+      autoDiscuss: r.auto_discuss === 1,
+      moderatorId: (r.moderator_id as string | null) ?? undefined,
     }));
   }
 
   saveRoom(room: RoomInfo) {
     this.db
       .prepare(
-        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            cwd = excluded.cwd,
-           agent_ids = excluded.agent_ids`,
+           agent_ids = excluded.agent_ids,
+           auto_discuss = excluded.auto_discuss,
+           moderator_id = excluded.moderator_id`,
       )
-      .run(room.id, room.name, room.cwd, JSON.stringify(room.agentIds), room.createdAt);
+      .run(
+        room.id,
+        room.name,
+        room.cwd,
+        JSON.stringify(room.agentIds),
+        room.createdAt,
+        room.autoDiscuss ? 1 : 0,
+        room.moderatorId ?? null,
+      );
   }
 
   // ---------- messages ----------

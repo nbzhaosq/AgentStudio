@@ -17,6 +17,7 @@ interface Props {
   drafts: Record<string, string>;
   streaming: boolean;
   onToggleStreaming: () => void;
+  onUpdateSettings: (patch: { autoDiscuss?: boolean; moderatorId?: string | null }) => void;
   onSend: (text: string) => void;
 }
 
@@ -84,7 +85,7 @@ function MessageBody({ msg, color, agents }: { msg: ChatMessage; color: string; 
   );
 }
 
-export default function ChatView({ room, agents, messages, statuses, activities, drafts, streaming, onToggleStreaming, onSend }: Props) {
+export default function ChatView({ room, agents, messages, statuses, activities, drafts, streaming, onToggleStreaming, onUpdateSettings, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,17 +109,56 @@ export default function ChatView({ room, agents, messages, statuses, activities,
             <span className="truncate">{room.cwd}</span>
           </div>
         </div>
-        <button
-          className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
-            streaming
-              ? "border-signal/40 bg-signal/10 text-signal"
-              : "border-line text-text-4 hover:text-text-2"
-          }`}
-          title="流式输出：agent 回复逐字显示；关闭则等完整回复"
-          onClick={onToggleStreaming}
-        >
-          {streaming ? "⚡ 流式" : "▤ 整段"}
-        </button>
+        <div className="flex items-center gap-2">
+          {room.autoDiscuss && (
+            <select
+              className="rounded-full border border-line bg-panel px-2 py-1 font-mono text-[10px] text-text-2 outline-none"
+              title="主持人：自驱讨论中决定继续或结束话题的 agent"
+              value={room.moderatorId ?? ""}
+              onChange={(e) =>
+                onUpdateSettings({ moderatorId: e.target.value || null })
+              }
+            >
+              <option value="" disabled>
+                选主持人…
+              </option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  🎤 @{a.id}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
+              room.autoDiscuss
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
+                : "border-line text-text-4 hover:text-text-2"
+            }`}
+            title="自驱讨论：开启后，讨论暂停时由主持人决定继续或结束话题，无需你介入"
+            onClick={() => {
+              if (!room.autoDiscuss && !room.moderatorId) {
+                // 开启时默认选第一个成员做主持人
+                onUpdateSettings({ autoDiscuss: true, moderatorId: agents[0]?.id ?? null });
+              } else {
+                onUpdateSettings({ autoDiscuss: !room.autoDiscuss });
+              }
+            }}
+          >
+            {room.autoDiscuss ? "🗣 自驱" : "🗣 自驱"}
+          </button>
+          <button
+            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${
+              streaming
+                ? "border-signal/40 bg-signal/10 text-signal"
+                : "border-line text-text-4 hover:text-text-2"
+            }`}
+            title="流式输出：agent 回复逐字显示；关闭则等完整回复"
+            onClick={onToggleStreaming}
+          >
+            {streaming ? "⚡ 流式" : "▤ 整段"}
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">

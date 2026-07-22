@@ -376,6 +376,72 @@ describe("Room 路由", () => {
     expect(events.filter((e) => e.type === "draft")).toHaveLength(0);
   });
 
+  it("自驱讨论：主持人续轮直至 [end]", async () => {
+    const calls: string[] = [];
+    const info: RoomInfo = {
+      id: "ra1", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
+    };
+    const room = new Room(info, [agentA, agentB], [], {
+      invoke: async (agent, prompt) => {
+        calls.push(agent.id);
+        if (agent.id === "b") {
+          // 主持人：第一次续轮，第二次结束
+          return calls.filter((c) => c === "b").length >= 2 ? "[end]" : "@a 下一步怎么做？";
+        }
+        return "好的";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    room.setAutoDiscuss(true, "b");
+    await room.postUserMessage("@a 讨论下方案");
+    await waitSettled(room);
+    expect(calls).toEqual(["a", "b", "a", "b"]);
+    const sys = room.getMessages().filter((m) => m.kind === "system").at(-1);
+    expect(sys?.text).toContain("结束了本话题");
+  });
+
+  it("自驱讨论默认关闭：安静后不触发主持人", async () => {
+    const { room, calls } = makeRoom({ a: "好的", b: "不应被调用" });
+    await room.postUserMessage("@a 说句话");
+    await waitSettled(room);
+    expect(calls).toEqual(["a"]);
+  });
+
+  it("主持人发言无人接话 → 讨论自然结束", async () => {
+    const events: ServerEvent[] = [];
+    const info: RoomInfo = {
+      id: "ra2", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
+    };
+    const room = new Room(info, [agentA, agentB], [], {
+      invoke: async (agent) => (agent.id === "b" ? "大家先这样吧" : "好的"),
+      emit: (e) => events.push(e),
+      appendMessage: () => {},
+    });
+    room.setAutoDiscuss(true, "b");
+    await room.postUserMessage("@a 干个活");
+    await waitSettled(room);
+    const texts = room.getMessages().map((m) => m.text);
+    expect(texts.some((t) => t.includes("讨论自然结束"))).toBe(true);
+  });
+
+  it("自驱讨论达到轮次上限后自动停止", async () => {
+    const info: RoomInfo = {
+      id: "ra3", name: "t", cwd: "/tmp", agentIds: ["a", "b"], createdAt: 0,
+    };
+    const room = new Room(info, [agentA, agentB], [], {
+      invoke: async (agent) => (agent.id === "b" ? "@a 继续" : "好的"),
+      emit: () => {},
+      appendMessage: () => {},
+      maxAutoRounds: 2,
+    });
+    room.setAutoDiscuss(true, "b");
+    await room.postUserMessage("@a 开始");
+    await waitSettled(room);
+    const sysTexts = room.getMessages().filter((m) => m.kind === "system").map((m) => m.text);
+    expect(sysTexts.some((t) => t.includes("轮上限"))).toBe(true);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

@@ -38,6 +38,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agentIds }),
     }),
+  updateRoomSettings: (
+    roomId: string,
+    patch: { autoDiscuss?: boolean; moderatorId?: string | null },
+  ) =>
+    req<RoomInfo>(`/api/rooms/${roomId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
   roomSessions: (roomId: string) =>
     req<SessionInfo[]>(`/api/rooms/${roomId}/sessions`),
   deleteRoomSession: (roomId: string, agentId?: string) =>

@@ -51,6 +51,10 @@ export interface RoomInfo {
   cwd: string;
   agentIds: string[];
   createdAt: number;
+  /** 自驱讨论模式：安静时由主持人决定继续或结束话题 */
+  autoDiscuss?: boolean;
+  /** 主持人 agent id（autoDiscuss 启用时必填） */
+  moderatorId?: string;
 }
 
 export type AgentStatus = "idle" | "thinking";

@@ -33,6 +33,8 @@ export interface RoomDeps {
   transcriptWindow?: number;
   /** 文件活动聚合周期 ms，默认 800 */
   activityFlushMs?: number;
+  /** 自驱讨论：每个话题主持人续轮上限，默认 20 */
+  maxAutoRounds?: number;
 }
 
 interface Turn {
@@ -46,10 +48,11 @@ const MAX_TEXT = 4000;
 export class Room {
   readonly info: RoomInfo;
   agents: AgentConfig[];
-  private deps: Required<Omit<RoomDeps, "maxHops" | "transcriptWindow" | "activityFlushMs">> & {
+  private deps: Required<Omit<RoomDeps, "maxHops" | "transcriptWindow" | "activityFlushMs" | "maxAutoRounds">> & {
     maxHops: number;
     transcriptWindow: number;
     activityFlushMs: number;
+    maxAutoRounds: number;
   };
   private messages: ChatMessage[] = [];
   private queues = new Map<string, Turn[]>();
@@ -60,6 +63,8 @@ export class Room {
   private lastTurnAt = new Map<string, number>();
   /** 流式输出开关（运行时，随 set_streaming 切换） */
   private streaming = true;
+  /** 自驱讨论：当前话题主持人已续轮数（用户发言时重置） */
+  private autoRounds = 0;
   private watcher?: FSWatcher;
   /** agentId → 最近改动文件（最新在后，上限 10） */
   private recentFiles = new Map<string, string[]>();
@@ -89,6 +94,7 @@ export class Room {
       maxHops: deps.maxHops ?? 12,
       transcriptWindow: deps.transcriptWindow ?? 30,
       activityFlushMs: deps.activityFlushMs ?? 800,
+      maxAutoRounds: deps.maxAutoRounds ?? 20,
     };
     // 监听工作区文件变更，作为 agent 的工作活动信号（平台不支持时静默降级）
     try {
@@ -150,6 +156,12 @@ export class Room {
     this.streaming = on;
   }
 
+  /** 开关自驱讨论 / 更换主持人 */
+  setAutoDiscuss(on: boolean, moderatorId?: string) {
+    this.info.autoDiscuss = on;
+    this.info.moderatorId = moderatorId;
+  }
+
   /** 某 agent 最近改动的文件（测试与 prompt 用） */
   recentFilesOf(agentId: string): string[] {
     return this.recentFiles.get(agentId) ?? [];
@@ -198,8 +210,9 @@ export class Room {
     });
   }
 
-  /** 用户发言：开启一条新触发链 */
+  /** 用户发言：开启一条新触发链，同时重置自驱讨论轮次（视为新话题/接管） */
   async postUserMessage(text: string): Promise<ChatMessage> {
+    this.autoRounds = 0;
     const msg = this.record("user", "user", text);
     const targets = this.resolveTargets(msg);
     for (const agentId of targets) {
@@ -266,11 +279,105 @@ export class Room {
     } finally {
       this.running.delete(agentId);
       this.setStatus(agentId, "idle");
+      this.maybeAutonomous();
     }
   }
 
-  private async runTurn(agentId: string, turn: Turn) {
-    const agent = this.agents.find((a) => a.id === agentId);
+  /** 自驱讨论：安静时刻让主持人判断继续或结束（房间维度开关） */
+  private maybeAutonomous() {
+    if (!this.info.autoDiscuss || !this.info.moderatorId) return;
+    if (!this.isSettled()) return;
+    const mod = this.agents.find((a) => a.id === this.info.moderatorId);
+    if (!mod) return;
+    const last = this.messages.at(-1);
+    if (!last || last.kind !== "agent") return;
+    if (last.author === mod.id) {
+      // 主持人说完无人接话 → 话题自然终止
+      this.postSystem("🏁 讨论自然结束");
+      return;
+    }
+    if (this.autoRounds >= this.deps.maxAutoRounds) {
+      this.autoRounds++; // 上限提示只发一次
+      this.postSystem(
+        `🛑 自驱讨论已达 ${this.deps.maxAutoRounds} 轮上限，自动结束。用户发言可开启新话题。`,
+      );
+      return;
+    }
+    this.autoRounds++;
+    void this.runModeratorTurn(mod);
+  }
+
+  private async runModeratorTurn(mod: AgentConfig) {
+    this.running.add(mod.id);
+    this.setStatus(mod.id, "thinking");
+    const sessionId = this.sessions.get(mod.id);
+    try {
+      const window = this.messages.slice(-15);
+      const transcript = window
+        .map((m) => {
+          const who =
+            m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
+          const text =
+            m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
+          return `[${who}]: ${text}`;
+        })
+        .join("\n\n");
+      const roster = this.agents
+        .filter((a) => a.id !== mod.id)
+        .map((a) => `@${a.id}`)
+        .join("、");
+      const prompt = `你是本房间的主持人 ${mod.name}（@${mod.id}）。一个话题的讨论刚刚暂停，由你判断继续还是结束。
+房间目录：${this.info.cwd}
+参与者：user、${roster}
+
+规则：
+1. 若讨论已有明确结论，或继续下去没有增量价值：只回复 [end]。
+2. 若值得继续：用一两句话小结进展与分歧，提出下一个最具体的问题，并 @ 应该回答的 agent（不要 @ 自己，不要 @all）。
+3. 回复就是发到聊天室里的内容，不要加前缀或解释。
+
+=== 最近讨论记录（最新在后） ===
+${transcript}
+
+现在轮到你裁决。`;
+
+      let result: { text: string; sessionId?: string };
+      try {
+        result = await this.call(mod, prompt, sessionId);
+      } catch (err) {
+        if (!sessionId) throw err;
+        console.warn(
+          `[room ${this.info.id}] 主持人 @${mod.id} 续聊失败，降级:`,
+          err instanceof Error ? err.message : err,
+        );
+        this.sessions.delete(mod.id);
+        this.deps.deleteSession(this.info.id, mod.id);
+        result = await this.call(mod, prompt);
+      }
+      if (result.sessionId) {
+        this.sessions.set(mod.id, result.sessionId);
+        this.deps.saveSession(this.info.id, mod.id, result.sessionId);
+        this.deps.emit({ type: "sessions_changed", roomId: this.info.id });
+      }
+
+      const reply = result.text.trim();
+      if (!reply || /^\[end\]/i.test(reply) || /^\[skip\]/i.test(reply)) {
+        this.postSystem(`🏁 主持人 ${mod.name} 结束了本话题`);
+        return;
+      }
+      const msg = this.record(mod.id, "agent", reply);
+      for (const targetId of this.resolveTargets(msg)) {
+        this.enqueue(targetId, { trigger: msg, chainId: `auto-${msg.id}`, hop: 0 });
+      }
+    } catch (err) {
+      this.fail(mod, err);
+    } finally {
+      this.running.delete(mod.id);
+      this.setStatus(mod.id, "idle");
+      this.maybeAutonomous();
+    }
+  }
+
+  private async runTurn(agentId: string, turn: Turn) {    const agent = this.agents.find((a) => a.id === agentId);
     if (!agent) return;
     const sessionId = this.sessions.get(agentId);
     const prompt = sessionId

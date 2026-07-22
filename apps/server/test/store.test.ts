@@ -52,6 +52,8 @@ describe("Store (SQLite)", () => {
       cwd: "/tmp",
       agentIds: ["a", "b"],
       createdAt: 123,
+      autoDiscuss: false,
+      moderatorId: undefined,
     };
     store.saveRoom(room);
     expect(store.loadRooms()).toEqual([room]);
@@ -98,6 +100,8 @@ describe("Store (SQLite)", () => {
       cwd: "/tmp",
       agentIds: ["a"],
       createdAt: 1,
+      autoDiscuss: false,
+      moderatorId: undefined,
     };
     writeFileSync(path.join(dir, "rooms.json"), JSON.stringify([room]));
     const msg: ChatMessage = {

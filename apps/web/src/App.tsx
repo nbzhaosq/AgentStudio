@@ -166,6 +166,16 @@ export default function App() {
     [room],
   );
 
+  const updateRoomSettings = useCallback(
+    (patch: { autoDiscuss?: boolean; moderatorId?: string | null }) => {
+      if (!room) return;
+      void api.updateRoomSettings(room.id, patch).then((updated) =>
+        setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
+      );
+    },
+    [room],
+  );
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -190,6 +200,7 @@ export default function App() {
             drafts={drafts[room.id] ?? {}}
             streaming={streaming}
             onToggleStreaming={toggleStreaming}
+            onUpdateSettings={updateRoomSettings}
             onSend={send}
           />
           <Roster
