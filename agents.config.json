@@ -96,7 +96,8 @@
       "cmd": "hermes",
       "args": ["chat", "-q", "{prompt}", "-Q", "--yolo"],
       "sessionResumeArgs": ["chat", "-q", "{prompt}", "-Q", "--yolo", "--resume", "{sessionId}"],
-      "sessionCapture": "session_id: ([a-z0-9_]+)"
+      "sessionCapture": "session_id: ([a-z0-9_]+)",
+      "stripPatterns": ["^session_id:.*$", "^\\s*$"]
     },
     {
       "id": "mock-a",

@@ -54,6 +54,7 @@ describe("Store (SQLite)", () => {
       createdAt: 123,
       autoDiscuss: false,
       moderatorId: undefined,
+      archived: false,
     };
     store.saveRoom(room);
     expect(store.loadRooms()).toEqual([room]);
@@ -91,6 +92,20 @@ describe("Store (SQLite)", () => {
     expect(store.getSessions("别的房间")).toEqual({});
   });
 
+  it("归档与删除房间", () => {
+    const { store } = tmpStore();
+    const room: RoomInfo = {
+      id: "r1", name: "x", cwd: "/tmp", agentIds: [], createdAt: 1,
+    };
+    store.saveRoom({ ...room, archived: true });
+    expect(store.loadRooms()[0].archived).toBe(true);
+    store.saveRoom({ ...room, archived: false });
+    expect(store.loadRooms()[0].archived).toBe(false);
+    store.saveRoom(room);
+    store.deleteRoom("r1");
+    expect(store.loadRooms()).toEqual([]);
+  });
+
   it("旧 JSONL 数据自动迁移", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "agent-studio-legacy-"));
     mkdirSync(path.join(dir, "rooms"), { recursive: true });
@@ -102,6 +117,7 @@ describe("Store (SQLite)", () => {
       createdAt: 1,
       autoDiscuss: false,
       moderatorId: undefined,
+      archived: false,
     };
     writeFileSync(path.join(dir, "rooms.json"), JSON.stringify([room]));
     const msg: ChatMessage = {

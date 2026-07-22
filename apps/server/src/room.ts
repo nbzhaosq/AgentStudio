@@ -10,7 +10,13 @@ import {
 } from "@agent-studio/shared";
 import type { AgentConfig } from "./config.js";
 
-export type InvokeReply = string | { text: string; sessionId?: string };
+export type InvokeReply =
+  | string
+  | {
+      text: string;
+      sessionId?: string;
+      meta?: { costUsd?: number; durationMs?: number; tokens?: number };
+    };
 
 export type InvokeFn = (
   agent: AgentConfig,
@@ -232,7 +238,11 @@ export class Room {
     author: string,
     kind: ChatMessage["kind"],
     text: string,
+    meta?: ChatMessage["meta"],
   ): ChatMessage {
+    if (kind === "agent") {
+      text = this.applyStrip(author, text);
+    }
     const msg: ChatMessage = {
       id: randomUUID(),
       roomId: this.info.id,
@@ -241,12 +251,28 @@ export class Room {
       text: text.slice(0, MAX_TEXT * 4),
       mentions: parseMentions(text, this.agents),
       ts: Date.now(),
+      meta,
     };
     this.messages.push(msg);
     if (kind === "agent") this.lastTurnAt.set(author, msg.ts);
     this.deps.appendMessage(msg);
     this.deps.emit({ type: "message", message: msg });
     return msg;
+  }
+
+  /** 应用 agent 的输出过滤规则（stripPatterns，gm 正则逐个抹除） */
+  private applyStrip(agentId: string, text: string): string {
+    const agent = this.agents.find((a) => a.id === agentId);
+    if (!agent?.stripPatterns?.length) return text;
+    let out = text;
+    for (const p of agent.stripPatterns) {
+      try {
+        out = out.replace(new RegExp(p, "gm"), "");
+      } catch {
+        /* 非法正则跳过 */
+      }
+    }
+    return out.replace(/\n{3,}/g, "\n\n").trim();
   }
 
   private enqueue(agentId: string, turn: Turn) {
@@ -377,14 +403,19 @@ ${transcript}
     }
   }
 
-  private async runTurn(agentId: string, turn: Turn) {    const agent = this.agents.find((a) => a.id === agentId);
+  private async runTurn(agentId: string, turn: Turn) {
+    const agent = this.agents.find((a) => a.id === agentId);
     if (!agent) return;
     const sessionId = this.sessions.get(agentId);
     const prompt = sessionId
       ? this.buildIncrementalPrompt(agent, turn.trigger)
       : this.buildPrompt(agent, turn.trigger);
 
-    let result: { text: string; sessionId?: string };
+    let result: {
+      text: string;
+      sessionId?: string;
+      meta?: { costUsd?: number; durationMs?: number; tokens?: number };
+    };
     try {
       result = await this.call(agent, prompt, sessionId);
     } catch (err) {
@@ -415,7 +446,7 @@ ${transcript}
     const reply = result.text;
     if (!reply.trim() || /^\[skip\]/i.test(reply.trim())) return;
 
-    const msg = this.record(agent.id, "agent", reply);
+    const msg = this.record(agent.id, "agent", reply, result.meta);
     const hop = turn.hop + 1;
     const targets = this.resolveTargets(msg);
     if (targets.length === 0) return;
@@ -436,7 +467,11 @@ ${transcript}
     agent: AgentConfig,
     prompt: string,
     sessionId?: string,
-  ): Promise<{ text: string; sessionId?: string }> {
+  ): Promise<{
+    text: string;
+    sessionId?: string;
+    meta?: { costUsd?: number; durationMs?: number; tokens?: number };
+  }> {
     const onChunk = this.streaming
       ? (text: string) =>
           this.deps.emit({

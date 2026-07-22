@@ -73,6 +73,10 @@ export class Store {
       this.db.exec("ALTER TABLE agents ADD COLUMN stream_args_extra TEXT");
       this.db.exec("ALTER TABLE agents ADD COLUMN stream_format TEXT");
     }
+    // 老库迁移：输出过滤列
+    if (!agentCols.includes("strip_patterns")) {
+      this.db.exec("ALTER TABLE agents ADD COLUMN strip_patterns TEXT");
+    }
     // 老库迁移：rooms 补充自驱讨论列
     const roomCols = this.db
       .prepare("PRAGMA table_info(rooms)")
@@ -81,6 +85,17 @@ export class Store {
     if (!roomCols.includes("auto_discuss")) {
       this.db.exec("ALTER TABLE rooms ADD COLUMN auto_discuss INTEGER NOT NULL DEFAULT 0");
       this.db.exec("ALTER TABLE rooms ADD COLUMN moderator_id TEXT");
+    }
+    if (!roomCols.includes("archived")) {
+      this.db.exec("ALTER TABLE rooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+    }
+    // 老库迁移：messages 补充 meta 列
+    const msgCols = this.db
+      .prepare("PRAGMA table_info(messages)")
+      .all()
+      .map((r) => (r as { name: string }).name);
+    if (!msgCols.includes("meta")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN meta TEXT");
     }
     this.migrateLegacyJsonl();
   }
@@ -112,6 +127,9 @@ export class Store {
       streamFormat:
         (r.stream_format as "claude-json" | "codex-json" | "kimi-json" | "text" | null) ??
         undefined,
+      stripPatterns: r.strip_patterns
+        ? (JSON.parse(r.strip_patterns as string) as string[])
+        : undefined,
     }));
   }
 
@@ -122,8 +140,8 @@ export class Store {
   upsertAgent(agent: AgentDef) {
     this.db
       .prepare(
-        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, session_start_args, session_resume_args, session_capture, stream_args_extra, stream_format, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agents (id, name, color, cmd, args, instructions, system_prompt, session_start_args, session_resume_args, session_capture, stream_args_extra, stream_format, strip_patterns, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            color = excluded.color,
@@ -135,7 +153,8 @@ export class Store {
            session_resume_args = excluded.session_resume_args,
            session_capture = excluded.session_capture,
            stream_args_extra = excluded.stream_args_extra,
-           stream_format = excluded.stream_format`,
+           stream_format = excluded.stream_format,
+           strip_patterns = excluded.strip_patterns`,
       )
       .run(
         agent.id,
@@ -150,6 +169,7 @@ export class Store {
         agent.sessionCapture ?? null,
         agent.streamArgsExtra ? JSON.stringify(agent.streamArgsExtra) : null,
         agent.streamFormat ?? null,
+        agent.stripPatterns ? JSON.stringify(agent.stripPatterns) : null,
         Date.now(),
       );
   }
@@ -177,20 +197,22 @@ export class Store {
       createdAt: r.created_at as number,
       autoDiscuss: r.auto_discuss === 1,
       moderatorId: (r.moderator_id as string | null) ?? undefined,
+      archived: r.archived === 1,
     }));
   }
 
   saveRoom(room: RoomInfo) {
     this.db
       .prepare(
-        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, name, cwd, agent_ids, created_at, auto_discuss, moderator_id, archived)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            cwd = excluded.cwd,
            agent_ids = excluded.agent_ids,
            auto_discuss = excluded.auto_discuss,
-           moderator_id = excluded.moderator_id`,
+           moderator_id = excluded.moderator_id,
+           archived = excluded.archived`,
       )
       .run(
         room.id,
@@ -200,7 +222,15 @@ export class Store {
         room.createdAt,
         room.autoDiscuss ? 1 : 0,
         room.moderatorId ?? null,
+        room.archived ? 1 : 0,
       );
+  }
+
+  /** 删除房间及其消息与会话 */
+  deleteRoom(roomId: string) {
+    this.db.prepare("DELETE FROM rooms WHERE id = ?").run(roomId);
+    this.db.prepare("DELETE FROM messages WHERE room_id = ?").run(roomId);
+    this.db.prepare("DELETE FROM room_sessions WHERE room_id = ?").run(roomId);
   }
 
   // ---------- messages ----------
@@ -208,8 +238,8 @@ export class Store {
   appendMessage(msg: ChatMessage) {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO messages (id, room_id, author, kind, text, mentions, ts)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO messages (id, room_id, author, kind, text, mentions, ts, meta)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         msg.id,
@@ -219,6 +249,7 @@ export class Store {
         msg.text,
         JSON.stringify(msg.mentions),
         msg.ts,
+        msg.meta ? JSON.stringify(msg.meta) : null,
       );
   }
 
@@ -234,6 +265,9 @@ export class Store {
       text: r.text as string,
       mentions: JSON.parse(r.mentions as string) as string[],
       ts: r.ts as number,
+      meta: r.meta
+        ? (JSON.parse(r.meta as string) as ChatMessage["meta"])
+        : undefined,
     }));
   }
 

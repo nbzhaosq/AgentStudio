@@ -167,13 +167,36 @@ export default function App() {
   );
 
   const updateRoomSettings = useCallback(
-    (patch: { autoDiscuss?: boolean; moderatorId?: string | null }) => {
+    (patch: { autoDiscuss?: boolean; moderatorId?: string | null; archived?: boolean }) => {
       if (!room) return;
       void api.updateRoomSettings(room.id, patch).then((updated) =>
         setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
       );
     },
     [room],
+  );
+
+  const archiveRoom = useCallback((roomId: string, archived: boolean) => {
+    void api
+      .updateRoomSettings(roomId, { archived })
+      .then((updated) =>
+        setRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r))),
+      );
+  }, []);
+
+  const deleteRoom = useCallback(
+    (roomId: string) => {
+      void api.deleteRoom(roomId).then(() => {
+        setRooms((prev) => {
+          const next = prev.filter((r) => r.id !== roomId);
+          setActiveRoomId((cur) =>
+            cur === roomId ? (next.find((r) => !r.archived)?.id ?? next[0]?.id ?? null) : cur,
+          );
+          return next;
+        });
+      });
+    },
+    [],
   );
 
   return (
@@ -184,6 +207,8 @@ export default function App() {
         agents={agents}
         onSelect={setActiveRoomId}
         onManageAgents={() => setShowAgents(true)}
+        onArchive={archiveRoom}
+        onDelete={deleteRoom}
         onCreated={(r) => {
           setRooms((prev) => [...prev, r]);
           setActiveRoomId(r.id);

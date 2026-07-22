@@ -442,6 +442,45 @@ describe("Room 路由", () => {
     expect(sysTexts.some((t) => t.includes("轮上限"))).toBe(true);
   });
 
+  it("stripPatterns：agent 回复落库前按正则过滤", async () => {
+    const info: RoomInfo = {
+      id: "rs-strip",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const aStrip = { ...agentA, stripPatterns: ["^session_id:.*$", "^noise:.*$"] };
+    const room = new Room(info, [aStrip], [], {
+      invoke: async () => "第一行\nsession_id: abc123\nnoise: 垃圾\n第二行",
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    const reply = room.getMessages().find((m) => m.kind === "agent");
+    expect(reply?.text).toBe("第一行\n\n第二行");
+  });
+
+  it("消息 meta 透传到落库消息上", async () => {
+    const info: RoomInfo = {
+      id: "rm-meta",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke: async () => ({ text: "ok", meta: { costUsd: 0.026, durationMs: 28000 } }),
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a hi");
+    await waitSettled(room);
+    const reply = room.getMessages().find((m) => m.kind === "agent");
+    expect(reply?.meta).toEqual({ costUsd: 0.026, durationMs: 28000 });
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

@@ -29,6 +29,8 @@ export interface AgentDef extends AgentInfo {
    */
   streamArgsExtra?: string[];
   streamFormat?: "claude-json" | "codex-json" | "kimi-json" | "text";
+  /** 输出过滤：回复落库前按这些正则（gm）抹掉（如 hermes 的 session_id 行） */
+  stripPatterns?: string[];
 }
 
 export type MessageKind = "user" | "agent" | "system";
@@ -43,6 +45,12 @@ export interface ChatMessage {
   /** 被 @ 的 agent id 列表（'all' 已展开） */
   mentions: string[];
   ts: number;
+  /** 本轮调用的元信息（部分 CLI 可提供） */
+  meta?: {
+    costUsd?: number;
+    durationMs?: number;
+    tokens?: number;
+  };
 }
 
 export interface RoomInfo {
@@ -55,6 +63,8 @@ export interface RoomInfo {
   autoDiscuss?: boolean;
   /** 主持人 agent id（autoDiscuss 启用时必填） */
   moderatorId?: string;
+  /** 归档（侧栏折叠隐藏，不出现在默认列表） */
+  archived?: boolean;
 }
 
 export type AgentStatus = "idle" | "thinking";

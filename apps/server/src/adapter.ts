@@ -16,6 +16,8 @@ export interface InvokeResult {
   text: string;
   /** 本轮建立/确认了的 CLI 会话 id（用于后续续聊） */
   sessionId?: string;
+  /** 调用元信息（成本/耗时/token，部分 CLI 可提供） */
+  meta?: { costUsd?: number; durationMs?: number; tokens?: number };
 }
 
 /** 用变量表替换 args 模板中的占位符 */
@@ -164,6 +166,7 @@ export function invokeAgent(
           pinnedId ??
           parser?.sessionId?.() ??
           captureSessionId(agent.sessionCapture, `${stdout}\n${stderr}`),
+        meta: parser?.meta?.(),
       });
     });
   });

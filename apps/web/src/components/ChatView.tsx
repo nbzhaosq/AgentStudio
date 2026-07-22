@@ -85,6 +85,16 @@ function MessageBody({ msg, color, agents }: { msg: ChatMessage; color: string; 
   );
 }
 
+/** agent 消息的调用元信息行 */
+function metaLine(m: ChatMessage): string | null {
+  if (!m.meta) return null;
+  const parts: string[] = [];
+  if (m.meta.costUsd !== undefined) parts.push(`$${m.meta.costUsd.toFixed(3)}`);
+  if (m.meta.tokens !== undefined) parts.push(`${(m.meta.tokens / 1000).toFixed(1)}k tok`);
+  if (m.meta.durationMs !== undefined) parts.push(`${(m.meta.durationMs / 1000).toFixed(0)}s`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export default function ChatView({ room, agents, messages, statuses, activities, drafts, streaming, onToggleStreaming, onUpdateSettings, onSend }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -189,6 +199,7 @@ export default function ChatView({ room, agents, messages, statuses, activities,
             );
           }
           const meta = authorMeta(m, agents);
+          const metaInfo = metaLine(m);
           return (
             <div key={m.id} className="msg-in">
               <div className="mb-1 flex items-baseline gap-2">
@@ -201,6 +212,9 @@ export default function ChatView({ room, agents, messages, statuses, activities,
                 <span className="font-mono text-[10px] text-text-4">
                   {new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
+                {metaInfo && (
+                  <span className="font-mono text-[10px] text-text-4/70">{metaInfo}</span>
+                )}
               </div>
               <MessageBody msg={m} color={meta.color} agents={agents} />
             </div>

@@ -8,6 +8,8 @@ interface Props {
   agents: AgentInfo[];
   onSelect: (id: string) => void;
   onManageAgents: () => void;
+  onArchive: (roomId: string, archived: boolean) => void;
+  onDelete: (roomId: string) => void;
   onCreated: (room: RoomInfo) => void;
 }
 
@@ -22,13 +24,17 @@ function LogoMark() {
   );
 }
 
-export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManageAgents, onCreated }: Props) {
+export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManageAgents, onArchive, onDelete, onCreated }: Props) {
   const [showForm, setShowForm] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [name, setName] = useState("");
   const [cwd, setCwd] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const activeRooms = rooms.filter((r) => !r.archived);
+  const archivedRooms = rooms.filter((r) => r.archived);
 
   async function submit() {
     setBusy(true);
@@ -127,38 +133,46 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManag
 
       <div className="micro-label px-4 pb-1.5">房间</div>
       <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-        {rooms.map((r) => {
+        {activeRooms.map((r) => {
           const active = r.id === activeRoomId;
           const memberColors = agents
             .filter((a) => r.agentIds.includes(a.id))
             .map((a) => a.color);
           return (
-            <button
-              key={r.id}
-              onClick={() => onSelect(r.id)}
-              className={`group relative block w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                active ? "bg-active" : "hover:bg-hover"
-              }`}
-            >
-              {active && (
-                <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-signal" />
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <span className={`truncate text-sm ${active ? "text-text-1" : "text-text-3"}`}>
-                  {r.name}
-                </span>
-                <span className="flex shrink-0 -space-x-1">
-                  {memberColors.slice(0, 5).map((c, i) => (
-                    <span
-                      key={i}
-                      className="h-1.5 w-1.5 rounded-full ring-2 ring-panel"
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </span>
-              </div>
-              <div className="mt-0.5 truncate font-mono text-[10px] text-text-4">{r.cwd}</div>
-            </button>
+            <div key={r.id} className="group relative">
+              <button
+                onClick={() => onSelect(r.id)}
+                className={`relative block w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                  active ? "bg-active" : "hover:bg-hover"
+                }`}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-signal" />
+                )}
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`truncate text-sm ${active ? "text-text-1" : "text-text-3"}`}>
+                    {r.name}
+                  </span>
+                  <span className="flex shrink-0 -space-x-1">
+                    {memberColors.slice(0, 5).map((c, i) => (
+                      <span
+                        key={i}
+                        className="h-1.5 w-1.5 rounded-full ring-2 ring-panel"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[10px] text-text-4">{r.cwd}</div>
+              </button>
+              <button
+                className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded px-1 text-[10px] text-text-4 hover:bg-active hover:text-text-2 group-hover:block"
+                title="归档此房间"
+                onClick={() => onArchive(r.id, true)}
+              >
+                ↓
+              </button>
+            </div>
           );
         })}
         {rooms.length === 0 && !showForm && (
@@ -167,6 +181,41 @@ export default function Sidebar({ rooms, activeRoomId, agents, onSelect, onManag
             <br />
             点上方「+ 房间」，把一群 agent 拉进同一个项目里干活。
           </p>
+        )}
+
+        {archivedRooms.length > 0 && (
+          <div className="pt-3">
+            <button
+              className="micro-label flex w-full items-center gap-1 px-2 pb-1.5 hover:text-text-2"
+              onClick={() => setShowArchived((v) => !v)}
+            >
+              {showArchived ? "▾" : "▸"} 已归档（{archivedRooms.length}）
+            </button>
+            {showArchived &&
+              archivedRooms.map((r) => (
+                <div key={r.id} className="group flex items-center gap-1 rounded-lg px-3 py-1.5 text-text-4 hover:bg-hover">
+                  <span className="min-w-0 flex-1 truncate text-xs">{r.name}</span>
+                  <button
+                    className="hidden rounded px-1 text-[10px] hover:text-text-2 group-hover:block"
+                    title="取消归档"
+                    onClick={() => onArchive(r.id, false)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    className="hidden rounded px-1 text-[10px] hover:text-red-400 group-hover:block"
+                    title="彻底删除（消息与会话一并清除）"
+                    onClick={() => {
+                      if (confirm(`彻底删除房间「${r.name}」？消息与会话记录将一并清除，不可恢复。`)) {
+                        onDelete(r.id);
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+          </div>
         )}
       </div>
     </aside>

@@ -25,6 +25,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
   const [startArgsText, setStartArgsText] = useState("");
   const [resumeArgsText, setResumeArgsText] = useState("");
   const [streamExtraText, setStreamExtraText] = useState("");
+  const [stripText, setStripText] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [error, setError] = useState("");
@@ -49,6 +50,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
     setStartArgsText(argsToLines(agent.sessionStartArgs));
     setResumeArgsText(argsToLines(agent.sessionResumeArgs));
     setStreamExtraText(argsToLines(agent.streamArgsExtra));
+    setStripText(argsToLines(agent.stripPatterns));
   }
 
   function formToAgent(): AgentDef | null {
@@ -59,6 +61,7 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
       sessionStartArgs: linesToArgs(startArgsText) || undefined,
       sessionResumeArgs: linesToArgs(resumeArgsText) || undefined,
       streamArgsExtra: linesToArgs(streamExtraText) || undefined,
+      stripPatterns: linesToArgs(stripText) || undefined,
     };
   }
 
@@ -448,6 +451,17 @@ export default function AgentsPanel({ agents, onClose, onChanged }: Props) {
                           <option value="codex-json">codex-json</option>
                           <option value="kimi-json">kimi-json</option>
                         </select>
+                      </label>
+                      <label className="block">
+                        <span className={labelCls}>stripPatterns（输出过滤正则，每行一个，gm 模式）</span>
+                        <textarea
+                          rows={2}
+                          className={`${inputCls} resize-none font-mono text-xs`}
+                          value={stripText}
+                          onChange={(e) => setStripText(e.target.value)}
+                          placeholder="^session_id:.*$"
+                          spellCheck={false}
+                        />
                       </label>
                     </div>
                   )}

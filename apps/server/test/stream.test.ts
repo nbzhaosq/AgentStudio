@@ -44,6 +44,19 @@ describe("makeStreamParser", () => {
     expect(p.sessionId?.()).toBe("session_abc-1");
   });
 
+  it("claude-json：result 事件提取成本与耗时", () => {
+    const p = makeStreamParser("claude-json");
+    p.feed('{"type":"result","result":"ok","total_cost_usd":0.026,"duration_ms":28000}\n');
+    expect(p.final()).toBe("ok");
+    expect(p.meta?.()).toEqual({ costUsd: 0.026, durationMs: 28000 });
+  });
+
+  it("codex-json：usage 提取 tokens", () => {
+    const p = makeStreamParser("codex-json");
+    p.feed('{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}\n');
+    expect(p.meta?.()).toEqual({ tokens: 150 });
+  });
+
   it("跨块拼接残行", () => {
     const p = makeStreamParser("claude-json");
     p.feed('{"type":"assistant","message":{"con');

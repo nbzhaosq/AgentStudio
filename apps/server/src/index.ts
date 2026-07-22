@@ -34,6 +34,9 @@ if (existsSync(configPath)) {
       patch.streamFormat = seed.streamFormat;
       patch.streamArgsExtra = seed.streamArgsExtra;
     }
+    if (!a.stripPatterns && seed.stripPatterns) {
+      patch.stripPatterns = seed.stripPatterns;
+    }
     if (Object.keys(patch).length > 0) store.upsertAgent({ ...a, ...patch });
   }
 }
@@ -157,6 +160,7 @@ const server = createServer(async (req, res) => {
         sessionCapture: body.sessionCapture,
         streamArgsExtra: body.streamArgsExtra,
         streamFormat: body.streamFormat,
+        stripPatterns: body.stripPatterns,
       };
       store.upsertAgent(agent);
       onAgentsChanged();
@@ -202,6 +206,14 @@ const server = createServer(async (req, res) => {
       return json(res, 201, info);
     }
     const roomMatch = p.match(/^\/api\/rooms\/([^/]+)$/);
+    if (roomMatch && req.method === "DELETE") {
+      const room = rooms.get(roomMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      rooms.delete(roomMatch[1]);
+      store.deleteRoom(roomMatch[1]);
+      broadcast({ type: "rooms_changed" });
+      return json(res, 200, { ok: true });
+    }
     if (roomMatch && req.method === "PATCH") {
       const room = rooms.get(roomMatch[1]);
       if (!room) return json(res, 404, { error: "房间不存在" });
@@ -209,6 +221,7 @@ const server = createServer(async (req, res) => {
         agentIds?: string[];
         autoDiscuss?: boolean;
         moderatorId?: string | null;
+        archived?: boolean;
       };
       const all = store.listAgents();
       // 成员变更（可选）
@@ -248,6 +261,10 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { error: "开启自驱讨论需要指定房间内的主持人 agent" });
         }
         room.setAutoDiscuss(auto, mod);
+      }
+      // 归档（可选）
+      if (body.archived !== undefined) {
+        room.info.archived = body.archived;
       }
       store.saveRoom(room.info);
       broadcast({ type: "rooms_changed" });

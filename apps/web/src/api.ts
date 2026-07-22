@@ -40,13 +40,15 @@ export const api = {
     }),
   updateRoomSettings: (
     roomId: string,
-    patch: { autoDiscuss?: boolean; moderatorId?: string | null },
+    patch: { autoDiscuss?: boolean; moderatorId?: string | null; archived?: boolean },
   ) =>
     req<RoomInfo>(`/api/rooms/${roomId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
+  deleteRoom: (roomId: string) =>
+    req<{ ok: boolean }>(`/api/rooms/${roomId}`, { method: "DELETE" }),
   roomSessions: (roomId: string) =>
     req<SessionInfo[]>(`/api/rooms/${roomId}/sessions`),
   deleteRoomSession: (roomId: string, agentId?: string) =>

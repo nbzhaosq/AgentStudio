@@ -10,6 +10,8 @@ export interface StreamParser {
   final(): string | null;
   /** 从流中捕获到的会话 id（如 kimi 的 meta 事件） */
   sessionId?(): string | undefined;
+  /** 调用元信息（部分格式可提供成本/耗时/token） */
+  meta?(): { costUsd?: number; durationMs?: number; tokens?: number } | undefined;
 }
 
 function lineParser(
@@ -81,10 +83,15 @@ export function makeStreamParser(format: StreamFormat): StreamParser {
 
   if (format === "codex-json") {
     const segments: string[] = [];
+    let tokens: number | undefined;
     const lp = lineParser((ev) => {
       const item = ev.item as { type?: string; text?: string } | undefined;
       if (ev.type === "item.completed" && item?.type === "agent_message" && item.text) {
         segments.push(item.text);
+      }
+      const usage = (ev as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+      if (usage && typeof usage.input_tokens === "number") {
+        tokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
       }
     });
     return {
@@ -96,6 +103,7 @@ export function makeStreamParser(format: StreamFormat): StreamParser {
         lp.flush();
         return segments.length > 0 ? segments.join("\n\n") : null;
       },
+      meta: () => (tokens !== undefined ? { tokens } : undefined),
     };
   }
 
@@ -104,6 +112,8 @@ export function makeStreamParser(format: StreamFormat): StreamParser {
   const blocks: string[] = [];
   let current = "";
   let resultText = "";
+  let costUsd: number | undefined;
+  let durationMs: number | undefined;
   const lp = lineParser((ev) => {
     if (ev.type === "assistant") {
       const msg = ev.message as { content?: { type?: string; text?: string }[] };
@@ -122,6 +132,8 @@ export function makeStreamParser(format: StreamFormat): StreamParser {
       }
     } else if (ev.type === "result" && typeof ev.result === "string") {
       resultText = ev.result;
+      if (typeof ev.total_cost_usd === "number") costUsd = ev.total_cost_usd;
+      if (typeof ev.duration_ms === "number") durationMs = ev.duration_ms;
     }
   });
   const draft = () => {
@@ -137,5 +149,9 @@ export function makeStreamParser(format: StreamFormat): StreamParser {
       lp.flush();
       return resultText || draft();
     },
+    meta: () =>
+      costUsd !== undefined || durationMs !== undefined
+        ? { costUsd, durationMs }
+        : undefined,
   };
 }
