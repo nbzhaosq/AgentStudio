@@ -116,6 +116,9 @@ export class Store {
     if (!msgCols.includes("meta")) {
       this.db.exec("ALTER TABLE messages ADD COLUMN meta TEXT");
     }
+    if (!msgCols.includes("images")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN images TEXT");
+    }
     this.migrateLegacyJsonl();
   }
 
@@ -324,8 +327,8 @@ export class Store {
   appendMessage(msg: ChatMessage) {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO messages (id, room_id, author, kind, text, mentions, ts, meta)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO messages (id, room_id, author, kind, text, mentions, ts, meta, images)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         msg.id,
@@ -336,6 +339,7 @@ export class Store {
         JSON.stringify(msg.mentions),
         msg.ts,
         msg.meta ? JSON.stringify(msg.meta) : null,
+        msg.images ? JSON.stringify(msg.images) : null,
       );
   }
 
@@ -353,6 +357,9 @@ export class Store {
       ts: r.ts as number,
       meta: r.meta
         ? (JSON.parse(r.meta as string) as ChatMessage["meta"])
+        : undefined,
+      images: r.images
+        ? (JSON.parse(r.images as string) as string[])
         : undefined,
     }));
   }

@@ -133,10 +133,10 @@ export default function App() {
   }, []);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, images?: string[]) => {
       if (!activeRoomId || wsRef.current?.readyState !== WebSocket.OPEN) return;
       wsRef.current.send(
-        JSON.stringify({ type: "send_message", roomId: activeRoomId, text }),
+        JSON.stringify({ type: "send_message", roomId: activeRoomId, text, images }),
       );
     },
     [activeRoomId],

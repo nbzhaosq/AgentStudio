@@ -225,9 +225,9 @@ export class Room {
   }
 
   /** 用户发言：开启一条新触发链，同时重置自驱讨论轮次（视为新话题/接管） */
-  async postUserMessage(text: string): Promise<ChatMessage> {
+  async postUserMessage(text: string, images?: string[]): Promise<ChatMessage> {
     this.autoRounds = 0;
-    const msg = this.record("user", "user", text);
+    const msg = this.record("user", "user", text, undefined, images);
     const targets = this.resolveTargets(msg);
     for (const agentId of targets) {
       this.enqueue(agentId, { trigger: msg, chainId: msg.id, hop: 0 });
@@ -247,6 +247,7 @@ export class Room {
     kind: ChatMessage["kind"],
     text: string,
     meta?: ChatMessage["meta"],
+    images?: string[],
   ): ChatMessage {
     const msg: ChatMessage = {
       id: randomUUID(),
@@ -257,6 +258,7 @@ export class Room {
       mentions: parseMentions(text, this.agents),
       ts: Date.now(),
       meta,
+      images: images && images.length > 0 ? images : undefined,
     };
     this.messages.push(msg);
     if (kind === "agent") this.lastTurnAt.set(author, msg.ts);
@@ -387,15 +389,7 @@ export class Room {
     const sessionId = this.sessions.get(mod.id);
     try {
       const window = this.messages.slice(-15);
-      const transcript = window
-        .map((m) => {
-          const who =
-            m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
-          const text =
-            m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
-          return `[${who}]: ${text}`;
-        })
-        .join("\n\n");
+      const transcript = window.map((m) => this.fmtMsg(m)).join("\n\n");
       const roster = this.agents
         .filter((a) => a.id !== mod.id)
         .map((a) => `@${a.id}`)
@@ -574,21 +568,26 @@ ${transcript}
     );
   }
 
+  /** 把一条消息格式化成 prompt 文本（含附图路径说明） */
+  private fmtMsg(m: ChatMessage): string {
+    const who =
+      m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
+    const text =
+      m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
+    const imgs =
+      m.images && m.images.length > 0
+        ? `\n（附 ${m.images.length} 张图片，路径：${m.images.join("、")}，可用你的读文件工具查看）`
+        : "";
+    return `[${who}]: ${text}${imgs}`;
+  }
+
   /** 续聊轮 prompt：只带自该 agent 上次发言后的增量消息（CLI 会话里已有完整上下文） */
   private buildIncrementalPrompt(agent: AgentConfig, trigger: ChatMessage): string {
     const since = this.lastTurnAt.get(agent.id) ?? 0;
     const gap = this.messages
       .filter((m) => m.ts > since && m.author !== agent.id && m.id !== trigger.id)
       .slice(-20);
-    const gapText = gap
-      .map((m) => {
-        const who =
-          m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
-        const text =
-          m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
-        return `[${who}]: ${text}`;
-      })
-      .join("\n\n");
+    const gapText = gap.map((m) => this.fmtMsg(m)).join("\n\n");
 
     return `你是 ${agent.name}（@${agent.id}），继续之前的协作（完整规则、角色设定与更早的对话见本会话开头）。
 房间目录：${this.info.cwd}
@@ -632,15 +631,7 @@ ${gapText || "（无）"}
             .join("\n")}\n`
         : "";
     const window = this.messages.slice(-this.deps.transcriptWindow);
-    const transcript = window
-      .map((m) => {
-        const who =
-          m.kind === "user" ? "user" : m.kind === "system" ? "system" : `@${m.author}`;
-        const text =
-          m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "…(截断)" : m.text;
-        return `[${who}]: ${text}`;
-      })
-      .join("\n\n");
+    const transcript = window.map((m) => this.fmtMsg(m)).join("\n\n");
 
     return `你是 ${agent.name}（@${agent.id}），正在一个多 Agent 协作聊天室里工作。${role}${customSection}
 房间绑定的项目目录（你的工作目录）：${this.info.cwd}

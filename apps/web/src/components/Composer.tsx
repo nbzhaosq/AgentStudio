@@ -1,17 +1,28 @@
 import { useRef, useState } from "react";
 import { parseMentions, type AgentInfo } from "@agent-studio/shared";
+import { api } from "../api";
 
-interface Props {
-  agents: AgentInfo[];
-  onSend: (text: string) => void;
+interface PendingImage {
+  path: string;
+  name: string;
+  previewUrl: string;
 }
 
-export default function Composer({ agents, onSend }: Props) {
+interface Props {
+  roomId: string;
+  agents: AgentInfo[];
+  onSend: (text: string, images?: string[]) => void;
+}
+
+export default function Composer({ roomId, agents, onSend }: Props) {
   const [text, setText] = useState("");
   const [suggest, setSuggest] = useState<AgentInfo[]>([]);
   const [atStart, setAtStart] = useState(0);
   const [noMentionHint, setNoMentionHint] = useState(false);
+  const [images, setImages] = useState<PendingImage[]>([]);
+  const [uploading, setUploading] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function updateSuggestions(value: string, caret: number) {
@@ -42,20 +53,42 @@ export default function Composer({ agents, onSend }: Props) {
     taRef.current?.focus();
   }
 
+  async function addFiles(files: Iterable<File>) {
+    const list = [...files].filter((f) => /^image\/(png|jpe?g|gif|webp)$/.test(f.type));
+    if (list.length === 0) return;
+    setUploading(true);
+    try {
+      for (const f of list) {
+        const { path } = await api.uploadImage(roomId, f);
+        setImages((prev) => [
+          ...prev,
+          { path, name: f.name, previewUrl: URL.createObjectURL(f) },
+        ]);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   function send() {
     const t = text.trim();
-    if (!t) return;
-    onSend(t);
-    if (agents.length > 0 && parseMentions(t, agents).length === 0) {
+    if (!t && images.length === 0) return;
+    onSend(t || "（图片）", images.length > 0 ? images.map((i) => i.path) : undefined);
+    if (t && agents.length > 0 && parseMentions(t, agents).length === 0) {
       setNoMentionHint(true);
       if (hintTimer.current) clearTimeout(hintTimer.current);
       hintTimer.current = setTimeout(() => setNoMentionHint(false), 4000);
     }
     setText("");
     setSuggest([]);
+    for (const i of images) URL.revokeObjectURL(i.previewUrl);
+    setImages([]);
+    if (fileRef.current) fileRef.current.value = "";
   }
 
-  const canSend = text.trim().length > 0;
+  const canSend = text.trim().length > 0 || images.length > 0;
 
   return (
     <div className="relative px-5 pb-4">
@@ -86,16 +119,61 @@ export default function Composer({ agents, onSend }: Props) {
         </div>
       )}
 
+      {images.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {images.map((img) => (
+            <div key={img.path} className="group relative">
+              <img
+                src={img.previewUrl}
+                alt={img.name}
+                className="h-14 w-14 rounded-lg border border-line object-cover"
+              />
+              <button
+                className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white group-hover:flex"
+                onClick={() => setImages((prev) => prev.filter((i) => i.path !== img.path))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-2 rounded-xl border border-line bg-panel2 p-2 transition-colors focus-within:border-signal/35">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) void addFiles(e.target.files);
+          }}
+        />
+        <button
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-4 transition-colors hover:bg-hover hover:text-text-2 disabled:opacity-40"
+          title="发送图片（也可以直接粘贴）"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploading ? "…" : "📎"}
+        </button>
         <textarea
           ref={taRef}
           rows={2}
           className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed outline-none placeholder:text-text-4"
-          placeholder={`发消息… @ 呼叫 agent，@all 全员集合`}
+          placeholder="发消息… @ 呼叫 agent，@all 全员集合，可粘贴图片"
           value={text}
           onChange={(e) => {
             setText(e.target.value);
             updateSuggestions(e.target.value, e.target.selectionStart);
+          }}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files];
+            if (files.length > 0) {
+              e.preventDefault();
+              void addFiles(files);
+            }
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {

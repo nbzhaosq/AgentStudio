@@ -45,6 +45,8 @@ export interface ChatMessage {
   /** 被 @ 的 agent id 列表（'all' 已展开） */
   mentions: string[];
   ts: number;
+  /** 附图（相对房间工作目录的路径，如 .agent-studio/uploads/x.png） */
+  images?: string[];
   /** 本轮调用的元信息（部分 CLI 可提供） */
   meta?: {
     costUsd?: number;
@@ -100,7 +102,7 @@ export interface SessionInfo {
 
 /** WebSocket 客户端 → 服务端 */
 export type ClientEvent =
-  | { type: "send_message"; roomId: string; text: string }
+  | { type: "send_message"; roomId: string; text: string; images?: string[] }
   | { type: "set_streaming"; roomId: string; streaming: boolean };
 
 /** WebSocket 服务端 → 客户端 */

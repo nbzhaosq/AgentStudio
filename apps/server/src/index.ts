@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
@@ -347,6 +347,51 @@ const server = createServer(async (req, res) => {
         .filter((s): s is NonNullable<typeof s> => s !== null);
       return json(res, 200, stats);
     }
+    const uploadMatch = p.match(/^\/api\/rooms\/([^/]+)\/uploads(?:\/([^/]+))?$/);
+    if (uploadMatch && req.method === "POST" && !uploadMatch[2]) {
+      const room = rooms.get(uploadMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      const body = JSON.parse(await readBody(req)) as {
+        name?: string;
+        dataBase64?: string;
+      };
+      const ext = (body.name ?? "").toLowerCase().match(/\.(png|jpe?g|gif|webp)$/)?.[0];
+      if (!body.name || !ext) {
+        return json(res, 400, { error: "仅支持 png/jpg/jpeg/gif/webp 图片" });
+      }
+      if (!body.dataBase64) return json(res, 400, { error: "缺少图片数据" });
+      const buf = Buffer.from(body.dataBase64, "base64");
+      if (buf.length === 0) return json(res, 400, { error: "图片数据为空" });
+      if (buf.length > 5 * 1024 * 1024) {
+        return json(res, 400, { error: "图片不能超过 5MB" });
+      }
+      const dir = path.join(room.info.cwd, ".agent-studio", "uploads");
+      mkdirSync(dir, { recursive: true });
+      const safeName = body.name.replace(/[^\w.-]/g, "_").slice(-60);
+      const filename = `${Date.now()}-${safeName}`;
+      writeFileSync(path.join(dir, filename), buf);
+      return json(res, 201, { path: `.agent-studio/uploads/${filename}` });
+    }
+    if (uploadMatch && req.method === "GET" && uploadMatch[2]) {
+      const room = rooms.get(uploadMatch[1]);
+      if (!room) return json(res, 404, { error: "房间不存在" });
+      const filename = uploadMatch[2];
+      if (!/^[\w.-]+$/.test(filename)) return json(res, 400, { error: "非法文件名" });
+      const file = path.join(room.info.cwd, ".agent-studio", "uploads", filename);
+      if (!existsSync(file)) return json(res, 404, { error: "图片不存在" });
+      const ext = path.extname(filename).toLowerCase();
+      const mime =
+        ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "image/jpeg";
+      res.writeHead(200, { "Content-Type": mime });
+      res.end(readFileSync(file));
+      return;
+    }
     if (p.startsWith("/api/")) {
       return json(res, 404, { error: "not found" });
     }
@@ -375,7 +420,11 @@ wss.on("connection", (ws) => {
         ws.send(JSON.stringify({ type: "error", message: "房间不存在" }));
         return;
       }
-      await room.postUserMessage(event.text);
+      // 附图校验：必须是本房间 uploads 下的相对路径
+      const images = (event.images ?? []).filter((p) =>
+        /^\.agent-studio\/uploads\/[\w.-]+$/.test(p),
+      );
+      await room.postUserMessage(event.text, images.length > 0 ? images : undefined);
     } else if (event.type === "set_streaming") {
       const room = rooms.get(event.roomId);
       room?.setStreaming(event.streaming);

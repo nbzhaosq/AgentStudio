@@ -560,6 +560,29 @@ describe("Room 路由", () => {
     expect(sysTexts.some((t) => t.includes("1 轮上限"))).toBe(true);
   });
 
+  it("带图消息：prompt 中包含图片路径", async () => {
+    let seen = "";
+    const info: RoomInfo = {
+      id: "rimg",
+      name: "t",
+      cwd: "/tmp",
+      agentIds: ["a"],
+      createdAt: 0,
+    };
+    const room = new Room(info, [agentA], [], {
+      invoke: async (_a, prompt) => {
+        seen = prompt;
+        return "ok";
+      },
+      emit: () => {},
+      appendMessage: () => {},
+    });
+    await room.postUserMessage("@a 看看这张图", [".agent-studio/uploads/x.png"]);
+    await waitSettled(room);
+    expect(seen).toContain(".agent-studio/uploads/x.png");
+    expect(room.getMessages()[0].images).toEqual([".agent-studio/uploads/x.png"]);
+  });
+
   it("运行中更新房间成员：新成员可被 @ 触发", async () => {
     const calls: string[] = [];
     const room = new Room(

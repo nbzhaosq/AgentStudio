@@ -25,7 +25,7 @@ interface Props {
     maxAutoRounds?: number | null;
     timeoutMs?: number | null;
   }) => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, images?: string[]) => void;
 }
 
 /** 把文本里的 @名字 高亮 */
@@ -313,6 +313,24 @@ export default function ChatView({ room, agents, messages, statuses, activities,
                 )}
               </div>
               <MessageBody msg={m} color={meta.color} agents={agents} />
+              {m.images && m.images.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-2 pl-3">
+                  {m.images.map((p) => (
+                    <a
+                      key={p}
+                      href={`/api/rooms/${room.id}/uploads/${p.split("/").pop()}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        src={`/api/rooms/${room.id}/uploads/${p.split("/").pop()}`}
+                        alt="附图"
+                        className="max-h-48 rounded-lg border border-line object-contain transition-opacity hover:opacity-85"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -353,7 +371,7 @@ export default function ChatView({ room, agents, messages, statuses, activities,
         <div ref={bottomRef} />
       </div>
 
-      <Composer agents={agents} onSend={onSend} />
+      <Composer roomId={room.id} agents={agents} onSend={onSend} />
     </main>
   );
 }

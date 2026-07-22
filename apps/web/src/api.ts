@@ -72,6 +72,17 @@ export const api = {
     ),
   messages: (roomId: string) =>
     req<ChatMessage[]>(`/api/rooms/${roomId}/messages`),
+  uploadImage: async (roomId: string, file: File): Promise<{ path: string }> => {
+    const buf = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
+    );
+    return req<{ path: string }>(`/api/rooms/${roomId}/uploads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, dataBase64: base64 }),
+    });
+  },
 };
 
 export function connectWS(onEvent: (e: ServerEvent) => void): WebSocket {
